@@ -31,7 +31,7 @@ export function TopBar() {
 
   return (
     <>
-      <header className="flex h-16 items-center justify-between border-b border-border bg-background px-6">
+      <header className="flex h-16 items-center justify-between border-b border-border bg-background px-8 lg:px-12">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"

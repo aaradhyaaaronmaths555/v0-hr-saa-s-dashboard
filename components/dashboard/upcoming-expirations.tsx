@@ -43,15 +43,17 @@ function getUrgencyStyles(urgency: "warning" | "destructive" | "default") {
 export function UpcomingExpirations() {
   return (
     <Card className="border-border bg-background">
-      <CardHeader>
-        <CardTitle className="text-base text-foreground">Upcoming Expirations</CardTitle>
+      <CardHeader className="px-6 pt-6 pb-2">
+        <CardTitle className="text-base font-semibold text-foreground">Upcoming Expirations</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="flex flex-col gap-4">
+      <CardContent className="px-6 pb-6">
+        <div className="flex flex-col gap-5">
           {expirations.map((item, index) => (
-            <div key={index} className="flex items-start gap-3">
-              <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              <div className="flex flex-1 flex-col gap-1">
+            <div key={index} className="flex items-start gap-4">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="flex flex-1 flex-col gap-1 pt-0.5">
                 <span className="text-sm font-medium text-foreground">
                   {item.certification}
                 </span>

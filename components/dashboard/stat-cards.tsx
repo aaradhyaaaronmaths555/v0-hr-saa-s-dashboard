@@ -34,18 +34,18 @@ const stats = [
 
 export function StatCards() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
       {stats.map((stat) => (
         <Card key={stat.label} className="border-border bg-background">
-          <CardContent className="flex items-center gap-4">
+          <CardContent className="flex items-center gap-5 p-6">
             <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${stat.iconBg}`}
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${stat.iconBg}`}
             >
               <stat.icon className={`h-5 w-5 ${stat.iconColor}`} />
             </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-2xl font-bold text-foreground">{stat.value}</span>
-              <span className="text-xs text-muted-foreground">{stat.label}</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-3xl font-bold tracking-tight text-foreground">{stat.value}</span>
+              <span className="text-sm text-muted-foreground">{stat.label}</span>
             </div>
           </CardContent>
         </Card>
