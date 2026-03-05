@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Calendar } from "lucide-react"
 
 const expirations = [
@@ -32,39 +31,36 @@ const expirations = [
 function getUrgencyStyles(urgency: "warning" | "destructive" | "default") {
   switch (urgency) {
     case "destructive":
-      return "bg-destructive/10 text-destructive border-destructive/20"
+      return "rounded-full bg-danger-bg px-2.5 py-0.5 text-xs font-medium text-danger"
     case "warning":
-      return "bg-warning/10 text-warning-foreground border-warning/20"
+      return "rounded-full bg-warning-bg px-2.5 py-0.5 text-xs font-medium text-warning"
     default:
-      return "bg-muted text-muted-foreground border-border"
+      return "rounded-full bg-neutral-bg px-2.5 py-0.5 text-xs font-medium text-text-secondary"
   }
 }
 
 export function UpcomingExpirations() {
   return (
-    <Card className="border-border bg-background">
-      <CardHeader className="px-6 pt-6 pb-2">
-        <CardTitle className="text-base font-semibold text-foreground">Upcoming Expirations</CardTitle>
+    <Card>
+      <CardHeader className="border-b border-[#E2E8F0] pb-4">
+        <CardTitle className="text-base font-semibold text-slate-800">Upcoming Expirations</CardTitle>
       </CardHeader>
-      <CardContent className="px-6 pb-6">
+      <CardContent>
         <div className="flex flex-col gap-5">
           {expirations.map((item, index) => (
             <div key={index} className="flex items-start gap-4">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+                <Calendar className="h-4 w-4 text-slate-500" />
               </div>
               <div className="flex flex-1 flex-col gap-1 pt-0.5">
-                <span className="text-sm font-medium text-foreground">
+                <span className="text-sm font-medium text-slate-700">
                   {item.certification}
                 </span>
-                <span className="text-xs text-muted-foreground">{item.employee}</span>
+                <span className="text-xs text-slate-400">{item.employee}</span>
               </div>
-              <Badge
-                variant="outline"
-                className={getUrgencyStyles(item.urgency)}
-              >
+              <span className={getUrgencyStyles(item.urgency)}>
                 {item.daysLeft}d
-              </Badge>
+              </span>
             </div>
           ))}
         </div>

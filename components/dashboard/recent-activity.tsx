@@ -1,7 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle2, FileText, UserPlus, Bell } from "lucide-react"
+import { CheckCircle2, FileText, UserPlus, Bell, Inbox } from "lucide-react"
 
-const activities = [
+type Activity = {
+  icon: typeof CheckCircle2
+  iconColor: string
+  text: string
+  time: string
+}
+
+const activities: Activity[] = [
   {
     icon: CheckCircle2,
     iconColor: "text-success",
@@ -34,28 +41,52 @@ const activities = [
   },
 ]
 
-export function RecentActivity() {
+function EmptyState() {
   return (
-    <Card className="border-border bg-background">
-      <CardHeader className="px-6 pt-6 pb-2">
-        <CardTitle className="text-base font-semibold text-foreground">Recent Activity</CardTitle>
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <Inbox className="mb-4 h-12 w-12 text-slate-300" />
+      <h3 className="text-base font-medium text-slate-500">No recent activity</h3>
+      <p className="mt-1 max-w-[200px] text-sm text-slate-400">
+        Activity will appear here as your team interacts with the platform.
+      </p>
+    </div>
+  )
+}
+
+interface RecentActivityProps {
+  showEmpty?: boolean
+}
+
+export function RecentActivity({ showEmpty = false }: RecentActivityProps) {
+  const displayActivities = showEmpty ? [] : activities
+
+  return (
+    <Card>
+      <CardHeader className="border-b border-[#E2E8F0] pb-4">
+        <CardTitle className="text-base font-semibold text-slate-800">
+          Recent Activity
+        </CardTitle>
       </CardHeader>
-      <CardContent className="px-6 pb-6">
-        <div className="flex flex-col gap-5">
-          {activities.map((activity, index) => (
-            <div key={index} className="flex items-start gap-4">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
-                <activity.icon
-                  className={`h-4 w-4 ${activity.iconColor}`}
-                />
+      <CardContent>
+        {displayActivities.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="flex flex-col gap-5">
+            {displayActivities.map((activity, index) => (
+              <div key={index} className="flex items-start gap-4">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+                  <activity.icon className={`h-4 w-4 ${activity.iconColor}`} />
+                </div>
+                <div className="flex flex-1 flex-col gap-1 pt-0.5">
+                  <span className="text-sm text-slate-600">{activity.text}</span>
+                  <span className="text-xs text-slate-400">
+                    {activity.time}
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-1 flex-col gap-1 pt-0.5">
-                <span className="text-sm text-foreground">{activity.text}</span>
-                <span className="text-xs text-muted-foreground">{activity.time}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

@@ -1,16 +1,6 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Check } from "lucide-react"
-
-const features = [
-  "Unlimited employees",
-  "Onboarding checklists",
-  "Policy acknowledgements",
-  "Compliance tracking",
-  "Automatic reminders",
-  "Audit-ready reports",
-]
 
 export function Pricing() {
   return (
@@ -26,19 +16,16 @@ export function Pricing() {
           <CardHeader className="text-center">
             <CardTitle className="text-foreground">Everything Plan</CardTitle>
             <div className="mt-2 flex items-baseline justify-center gap-1">
-              <span className="text-4xl font-bold text-foreground">$69</span>
+              <span className="text-4xl font-bold text-foreground">$149</span>
               <span className="text-muted-foreground">/month</span>
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-6">
-            <ul className="flex flex-col gap-3 text-left">
-              {features.map((feature) => (
-                <li key={feature} className="flex items-center gap-3 text-sm text-foreground">
-                  <Check className="h-4 w-4 shrink-0 text-success" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
+            <p className="text-left text-sm text-muted-foreground">
+              Everything your aged care facility needs to stay compliant —
+              unlimited staff, certificate tracking, policy acknowledgements,
+              onboarding gates, ACQSC audit reports, and automated reminders.
+            </p>
             <Link href="/login" className="w-full">
               <Button size="lg" className="w-full">
                 Start 14-day free trial
