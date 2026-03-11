@@ -1,45 +1,18 @@
+import { createClient } from "@/lib/supabase/server"
+import { fetchLiveComplianceData } from "@/lib/supabase/live-data"
+import type {
+  LiveEmployee,
+  LivePolicy,
+  LivePolicyAcknowledgement,
+} from "@/lib/supabase/live-data"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle2, FileText, UserPlus, Bell, Inbox } from "lucide-react"
+import { CheckCircle2, FileText, TriangleAlert, Inbox } from "lucide-react"
 
-type Activity = {
-  icon: typeof CheckCircle2
-  iconColor: string
+type ActivityItem = {
+  type: "ack" | "certificate" | "incident"
   text: string
-  time: string
+  at: string
 }
-
-const activities: Activity[] = [
-  {
-    icon: CheckCircle2,
-    iconColor: "text-success",
-    text: "Sarah M. completed onboarding",
-    time: "2 hours ago",
-  },
-  {
-    icon: FileText,
-    iconColor: "text-primary",
-    text: "New policy assigned to 12 staff",
-    time: "4 hours ago",
-  },
-  {
-    icon: UserPlus,
-    iconColor: "text-primary",
-    text: "James T. added as new employee",
-    time: "Yesterday",
-  },
-  {
-    icon: Bell,
-    iconColor: "text-warning",
-    text: "Reminder sent to 5 pending employees",
-    time: "Yesterday",
-  },
-  {
-    icon: CheckCircle2,
-    iconColor: "text-success",
-    text: "Lisa K. acknowledged WHS Policy",
-    time: "2 days ago",
-  },
-]
 
 function EmptyState() {
   return (
@@ -53,12 +26,71 @@ function EmptyState() {
   )
 }
 
+function relativeTime(iso: string) {
+  const ms = Date.now() - new Date(iso).getTime()
+  const hours = Math.floor(ms / 3600000)
+  if (hours < 1) return "Just now"
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`
+  const days = Math.floor(hours / 24)
+  return `${days} day${days === 1 ? "" : "s"} ago`
+}
+
 interface RecentActivityProps {
   showEmpty?: boolean
 }
 
-export function RecentActivity({ showEmpty = false }: RecentActivityProps) {
-  const displayActivities = showEmpty ? [] : activities
+export async function RecentActivity({ showEmpty = false }: RecentActivityProps) {
+  const supabase = await createClient()
+  const data = await fetchLiveComplianceData(supabase as never)
+
+  const employeeById = new Map(
+    data.employees.map((employee: LiveEmployee) => [employee.id, employee.name] as const)
+  )
+  const policyById = new Map(
+    data.policies.map((policy: LivePolicy) => [policy.id, policy.title] as const)
+  )
+
+  const { data: certificateRows } = await supabase
+    .from("Certificate")
+    .select("id,type,employeeId,createdAt")
+    .order("createdAt", { ascending: false })
+    .limit(10)
+
+  const { data: incidentRows } = await supabase
+    .from("WHSIncident")
+    .select("id,incidentType,status,createdAt")
+    .order("createdAt", { ascending: false })
+    .limit(10)
+
+  const ackEvents: ActivityItem[] = data.acknowledgements
+    .filter((ack: LivePolicyAcknowledgement) => !!ack.acknowledgedAt)
+    .map((ack: LivePolicyAcknowledgement) => ({
+      type: "ack",
+      text: `${employeeById.get(ack.employeeId) ?? "Employee"} acknowledged ${policyById.get(ack.policyId) ?? "policy"}`,
+      at: ack.acknowledgedAt!,
+    }))
+
+  const certificateEvents: ActivityItem[] = (certificateRows ?? []).map(
+    (row: { type: string; employeeId: string; createdAt: string }) => ({
+      type: "certificate",
+      text: `${employeeById.get(row.employeeId) ?? "Employee"} uploaded/updated ${row.type} certificate`,
+      at: row.createdAt,
+    })
+  )
+
+  const incidentEvents: ActivityItem[] = (incidentRows ?? []).map(
+    (row: { incidentType: string; status: string; createdAt: string }) => ({
+      type: "incident",
+      text: `WHS incident logged: ${row.incidentType} (${row.status})`,
+      at: row.createdAt,
+    })
+  )
+
+  const merged = [...ackEvents, ...certificateEvents, ...incidentEvents]
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, 10)
+
+  const displayActivities = showEmpty ? [] : merged
 
   return (
     <Card>
@@ -75,12 +107,14 @@ export function RecentActivity({ showEmpty = false }: RecentActivityProps) {
             {displayActivities.map((activity, index) => (
               <div key={index} className="flex items-start gap-4">
                 <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-                  <activity.icon className={`h-4 w-4 ${activity.iconColor}`} />
+                  {activity.type === "ack" && <CheckCircle2 className="h-4 w-4 text-success" />}
+                  {activity.type === "certificate" && <FileText className="h-4 w-4 text-primary" />}
+                  {activity.type === "incident" && <TriangleAlert className="h-4 w-4 text-warning" />}
                 </div>
                 <div className="flex flex-1 flex-col gap-1 pt-0.5">
                   <span className="text-sm text-slate-600">{activity.text}</span>
                   <span className="text-xs text-slate-400">
-                    {activity.time}
+                    {relativeTime(activity.at)}
                   </span>
                 </div>
               </div>

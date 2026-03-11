@@ -1,9 +1,10 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { getCertificatesBadgeCount } from "@/lib/certificates-data"
+import { getCertificatesAlertSummary } from "@/lib/certificates-data"
 import {
   LayoutDashboard,
   Users,
@@ -11,21 +12,38 @@ import {
   ShieldCheck,
   BarChart2,
   FileText,
+  TriangleAlert,
+  IdCard,
+  ClipboardCheck,
 } from "lucide-react"
-
-const PENDING_ACKNOWLEDGEMENTS_COUNT = 14
-
-const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Employees", href: "/employees", icon: Users },
-  { label: "Certificates", href: "/certificates", icon: ShieldCheck, badge: getCertificatesBadgeCount(), badgeVariant: "red" as const },
-  { label: "Policies", href: "/policies", icon: FileText, badge: PENDING_ACKNOWLEDGEMENTS_COUNT, badgeVariant: "amber" as const },
-  { label: "Onboarding", href: "/onboarding", icon: ClipboardList },
-  { label: "Reports", href: "/reports", icon: BarChart2 },
-]
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const [certificateBadge, setCertificateBadge] = useState(0)
+  const [certificateTooltip, setCertificateTooltip] = useState("")
+
+  useEffect(() => {
+    const loadBadge = async () => {
+      const summary = await getCertificatesAlertSummary()
+      setCertificateBadge(summary.totalFlagged)
+      setCertificateTooltip(
+        `30d: ${summary.dueIn30} | 60d: ${summary.dueIn60} | 90d: ${summary.dueIn90} | Exp: ${summary.expired}`
+      )
+    }
+    void loadBadge()
+  }, [])
+
+  const navItems = [
+    { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { label: "Employees", href: "/employees", icon: Users },
+    { label: "Certificates", href: "/certificates", icon: ShieldCheck, badge: certificateBadge, badgeVariant: "red" as const },
+    { label: "Policies", href: "/policies", icon: FileText, badge: 0, badgeVariant: "amber" as const },
+    { label: "Onboarding", href: "/onboarding", icon: ClipboardList },
+    { label: "WHS Incidents", href: "/whs-incidents", icon: TriangleAlert },
+    { label: "Right to Work", href: "/right-to-work", icon: IdCard },
+    { label: "Fair Work Checklist", href: "/fair-work-checklist", icon: ClipboardCheck },
+    { label: "Reports", href: "/reports", icon: BarChart2 },
+  ]
 
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 shrink-0 flex-col border-r border-border bg-sidebar lg:flex">
@@ -38,7 +56,7 @@ export function AppSidebar() {
             item.href === "/dashboard"
               ? pathname === "/dashboard"
               : pathname.startsWith(item.href)
-          const badgeCount = "badge" in item ? item.badge : 0
+          const badgeCount = item.badge ?? 0
           const badgeVariant = "badgeVariant" in item ? item.badgeVariant : "red"
 
           return (
@@ -56,6 +74,7 @@ export function AppSidebar() {
                 <item.icon className="h-4 w-4" />
                 {badgeCount > 0 && (
                   <span
+                    title={item.href === "/certificates" ? certificateTooltip : undefined}
                     className={cn(
                       "absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium",
                       badgeVariant === "red"

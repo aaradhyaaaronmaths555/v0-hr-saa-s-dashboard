@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Organisation {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users      User[]
+  employees  Employee[]
+  policies   Policy[]
+  certificates Certificate[]
+  incidents  WHSIncident[]
+}
+
+model User {
+  id             String   @id
+  email          String   @unique
+  fullName       String?  @map("full_name")
+  organisationId String   @map("organisation_id")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+}
+
+model Employee {
+  id             String   @id @default(cuid())
+  organisationId String   @map("organisation_id")
+  name           String
+  email          String?
+  onboardingStatus String @default("Not Started") @map("onboarding_status")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  certificates Certificate[]
+  acknowledgements PolicyAcknowledgement[]
+  rightToWork RightToWork?
+  fairWorkChecklist FairWorkChecklist?
+}
+
+model Certificate {
+  id           String   @id @default(cuid())
+  employeeId  String   @map("employee_id")
+  type        String
+  expiryDate  DateTime? @map("expiry_date")
+  status      String   @default("Valid")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model Policy {
+  id             String   @id @default(cuid())
+  organisationId String   @map("organisation_id")
+  title          String
+  description   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation    Organisation          @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  acknowledgements PolicyAcknowledgement[]
+}
+
+model PolicyAcknowledgement {
+  id        String   @id @default(cuid())
+  policyId  String   @map("policy_id")
+  employeeId String  @map("employee_id")
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  policy   Policy   @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model WHSIncident {
+  id               String   @id @default(cuid())
+  organisationId   String   @map("organisationId")
+  incidentType     String   @map("incidentType")
+  incidentDate     DateTime @map("incidentDate")
+  employeesInvolved String  @map("employeesInvolved")
+  correctiveAction String   @map("correctiveAction")
+  status           String   @default("Open")
+  createdAt        DateTime @default(now()) @map("createdAt")
+  updatedAt        DateTime @updatedAt @map("updatedAt")
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+}
+
+model RightToWork {
+  id             String   @id @default(cuid())
+  employeeId     String   @unique @map("employeeId")
+  visaType       String   @map("visaType")
+  visaExpiryDate DateTime @map("visaExpiryDate")
+  createdAt      DateTime @default(now()) @map("createdAt")
+  updatedAt      DateTime @updatedAt @map("updatedAt")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model FairWorkChecklist {
+  id                    String   @id @default(cuid())
+  employeeId            String   @unique @map("employeeId")
+  taxFileDeclaration    Boolean  @default(false) @map("taxFileDeclaration")
+  superChoiceForm       Boolean  @default(false) @map("superChoiceForm")
+  fairWorkInfoStatement Boolean  @default(false) @map("fairWorkInfoStatement")
+  createdAt             DateTime @default(now()) @map("createdAt")
+  updatedAt             DateTime @updatedAt @map("updatedAt")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}

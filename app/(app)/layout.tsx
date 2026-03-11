@@ -1,6 +1,7 @@
 import { AppSidebar } from "@/components/dashboard/app-sidebar"
 import { AppTopBar } from "@/components/layout/app-top-bar"
 import { PageTransition } from "@/components/layout/page-transition"
+import { ComplianceChatWidget } from "@/components/ai/compliance-chat-widget"
 
 export default function AppLayout({
   children,
@@ -22,6 +23,7 @@ export default function AppLayout({
             <PageTransition>{children}</PageTransition>
           </div>
         </main>
+        <ComplianceChatWidget />
       </div>
     </div>
   )

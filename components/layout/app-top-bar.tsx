@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { signOut } from "next-auth/react"
+import { usePathname, useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 import {
   Bell,
   User,
@@ -21,6 +21,9 @@ import {
   ClipboardList,
   ShieldCheck,
   BarChart2,
+  TriangleAlert,
+  IdCard,
+  ClipboardCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -45,19 +48,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { getCertificatesBadgeCount } from "@/lib/certificates-data"
-
-// Dummy counts — replace with real API
-const PENDING_ACKNOWLEDGEMENTS_COUNT = 14
-
-const navLinks = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Employees", href: "/employees", icon: Users },
-  { label: "Certificates", href: "/certificates", icon: ShieldCheck, badge: getCertificatesBadgeCount(), badgeVariant: "red" as const },
-  { label: "Policies", href: "/policies", icon: FileText, badge: PENDING_ACKNOWLEDGEMENTS_COUNT, badgeVariant: "amber" as const },
-  { label: "Onboarding", href: "/onboarding", icon: ClipboardList },
-  { label: "Reports", href: "/reports", icon: BarChart2 },
-]
+import { getCertificatesAlertSummary } from "@/lib/certificates-data"
 
 type Notification = {
   id: string
@@ -65,6 +56,14 @@ type Notification = {
   message: string
   timestamp: string
   read: boolean
+}
+
+type NavLink = {
+  label: string
+  href: string
+  icon: typeof LayoutDashboard
+  badge?: number
+  badgeVariant?: "red" | "amber"
 }
 
 const initialNotifications: Notification[] = [
@@ -124,10 +123,14 @@ function MobileSidebar({
   open,
   onOpenChange,
   onSignOut,
+  navLinks,
+  certificateTooltip,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSignOut: () => void
+  navLinks: NavLink[]
+  certificateTooltip: string
 }) {
   const pathname = usePathname()
 
@@ -146,12 +149,12 @@ function MobileSidebar({
           </SheetTitle>
         </SheetHeader>
         <nav className="flex flex-1 flex-col gap-0.5 p-3">
-          {navLinks.map((link) => {
+          {navLinks.map((link: NavLink) => {
             const isActive =
               link.href === "/dashboard"
                 ? pathname === "/dashboard"
                 : pathname?.startsWith(link.href)
-            const badgeCount = "badge" in link ? link.badge : 0
+            const badgeCount = link.badge ?? 0
             const badgeVariant = "badgeVariant" in link ? link.badgeVariant : "red"
 
             return (
@@ -170,6 +173,7 @@ function MobileSidebar({
                   <link.icon className="h-4 w-4" />
                   {badgeCount > 0 && (
                     <span
+                      title={link.href === "/certificates" ? certificateTooltip : undefined}
                       className={cn(
                         "absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium",
                         badgeVariant === "red"
@@ -207,13 +211,35 @@ function MobileSidebar({
 export function AppTopBar() {
   const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
+  const [certificateBadge, setCertificateBadge] = useState(0)
+  const [certificateTooltip, setCertificateTooltip] = useState("")
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications)
   const [notifOpen, setNotifOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     setMounted(true)
+    const loadBadge = async () => {
+      const summary = await getCertificatesAlertSummary()
+      setCertificateBadge(summary.totalFlagged)
+      setCertificateTooltip(
+        `30d: ${summary.dueIn30} | 60d: ${summary.dueIn60} | 90d: ${summary.dueIn90} | Exp: ${summary.expired}`
+      )
+    }
+    void loadBadge()
   }, [])
+
+  const navLinks = [
+    { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { label: "Employees", href: "/employees", icon: Users },
+    { label: "Certificates", href: "/certificates", icon: ShieldCheck, badge: certificateBadge, badgeVariant: "red" as const },
+    { label: "Policies", href: "/policies", icon: FileText, badge: 0, badgeVariant: "amber" as const },
+    { label: "Onboarding", href: "/onboarding", icon: ClipboardList },
+    { label: "WHS Incidents", href: "/whs-incidents", icon: TriangleAlert },
+    { label: "Right to Work", href: "/right-to-work", icon: IdCard },
+    { label: "Fair Work Checklist", href: "/fair-work-checklist", icon: ClipboardCheck },
+    { label: "Reports", href: "/reports", icon: BarChart2 },
+  ]
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
@@ -229,9 +255,11 @@ export function AppTopBar() {
     )
   }
 
-  const handleSignOut = () => {
-    document.cookie = "peopledesk_session=; path=/; max-age=0"
-    signOut({ callbackUrl: "/" })
+  const router = useRouter()
+  const handleSignOut = async () => {
+    await createClient().auth.signOut()
+    router.push("/")
+    router.refresh()
   }
 
   return (
@@ -258,12 +286,12 @@ export function AppTopBar() {
 
         {/* Middle: Navigation Links (hidden on mobile) */}
         <nav className="hidden items-center gap-1 lg:flex">
-          {navLinks.map((link) => {
+          {navLinks.map((link: NavLink) => {
             const isActive =
               link.href === "/dashboard"
                 ? pathname === "/dashboard"
                 : pathname?.startsWith(link.href)
-            const badgeCount = "badge" in link ? link.badge : 0
+            const badgeCount = link.badge ?? 0
             const badgeVariant = "badgeVariant" in link ? link.badgeVariant : "red"
 
             return (
@@ -280,6 +308,7 @@ export function AppTopBar() {
                 {link.label}
                 {badgeCount > 0 && (
                   <span
+                    title={link.href === "/certificates" ? certificateTooltip : undefined}
                     className={cn(
                       "flex h-4 min-w-4 items-center justify-center rounded-full px-1.5 text-[10px] font-medium",
                       badgeVariant === "red"
@@ -428,11 +457,7 @@ export function AppTopBar() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   variant="destructive"
-                  onSelect={() => {
-                    document.cookie =
-                      "peopledesk_session=; path=/; max-age=0"
-                    signOut({ callbackUrl: "/" })
-                  }}
+                  onSelect={() => handleSignOut()}
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign out
@@ -453,6 +478,8 @@ export function AppTopBar() {
         open={mobileMenuOpen}
         onOpenChange={setMobileMenuOpen}
         onSignOut={handleSignOut}
+        navLinks={navLinks}
+        certificateTooltip={certificateTooltip}
       />
     </>
   )

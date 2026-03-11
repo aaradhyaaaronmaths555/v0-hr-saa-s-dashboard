@@ -1,51 +1,12 @@
-import { NextResponse } from "next/server"
-import type { NextRequest } from "next/server"
+import { type NextRequest } from "next/server"
+import { updateSession } from "@/lib/supabase/middleware"
 
-const SESSION_COOKIE = "peopledesk_session"
-
-function hasSession(request: NextRequest): boolean {
-  return request.cookies.has(SESSION_COOKIE)
-}
-
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
-  const loggedIn = hasSession(request)
-
-  // If logged in and visiting /login, redirect to dashboard
-  if (pathname === "/login" && loggedIn) {
-    return NextResponse.redirect(new URL("/dashboard", request.url))
-  }
-
-  // Protected routes: redirect to /login if no session
-  const protectedPaths = [
-    "/dashboard",
-    "/employees",
-    "/certificates",
-    "/policies",
-    "/onboarding",
-    "/reports",
-  ]
-  const isProtected = protectedPaths.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`)
-  )
-
-  if (isProtected && !loggedIn) {
-    const loginUrl = new URL("/login", request.url)
-    loginUrl.searchParams.set("from", pathname)
-    return NextResponse.redirect(loginUrl)
-  }
-
-  return NextResponse.next()
+export async function middleware(request: NextRequest) {
+  return updateSession(request)
 }
 
 export const config = {
   matcher: [
-    "/login",
-    "/dashboard/:path*",
-    "/employees/:path*",
-    "/certificates/:path*",
-    "/policies/:path*",
-    "/onboarding/:path*",
-    "/reports/:path*",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }
