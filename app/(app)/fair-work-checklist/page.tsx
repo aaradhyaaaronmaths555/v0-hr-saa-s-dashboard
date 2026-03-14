@@ -25,6 +25,7 @@ function completionPercent(row: ChecklistRow) {
 export default function FairWorkChecklistPage() {
   const [rows, setRows] = useState<ChecklistRow[]>([])
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [message, setMessage] = useState<string>("")
 
   async function loadRows() {
     const res = await fetch("/api/fair-work-checklist")
@@ -38,11 +39,24 @@ export default function FairWorkChecklistPage() {
 
   async function saveRow(row: ChecklistRow) {
     setSavingId(row.employeeId)
-    await fetch("/api/fair-work-checklist", {
+    setMessage("")
+    const response = await fetch("/api/fair-work-checklist", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(row),
+      body: JSON.stringify({
+        employeeId: row.employeeId,
+        taxFileDeclaration: row.taxFileDeclaration,
+        superChoiceForm: row.superChoiceForm,
+        fairWorkInfoStatement: row.fairWorkInfoStatement,
+      }),
     })
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string }
+      setMessage(body.error ?? "Failed to save Fair Work checklist.")
+      setSavingId(null)
+      return
+    }
+    setMessage("Fair Work checklist saved successfully.")
     setSavingId(null)
     await loadRows()
   }
@@ -55,6 +69,11 @@ export default function FairWorkChecklistPage() {
           Track Tax File Declaration, Super Choice Form, and Fair Work Information Statement per employee.
         </p>
       </div>
+      {message ? (
+        <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+          {message}
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">

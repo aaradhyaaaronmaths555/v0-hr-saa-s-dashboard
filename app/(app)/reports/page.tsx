@@ -9,6 +9,10 @@ import { getEmployeeComplianceScores } from "@/lib/compliance/metrics"
 export default async function ReportsPage() {
   const supabase = await createClient()
   const data = await fetchLiveComplianceData(supabase as never)
+  const { data: whsRows } = await supabase
+    .from("WHSIncident")
+    .select("id,incidentType,status,incidentDate,correctiveAction")
+    .order("incidentDate", { ascending: false })
   const complianceScores = getEmployeeComplianceScores(
     data.employees,
     data.certificates,
@@ -28,6 +32,36 @@ export default async function ReportsPage() {
   for (const ack of data.acknowledgements) {
     if (!ack.acknowledgedAt) continue
     policyAcksByEmployee.set(ack.employeeId, (policyAcksByEmployee.get(ack.employeeId) ?? 0) + 1)
+  }
+
+  const whsStatusCounts = {
+    New: 0,
+    "In review": 0,
+    Actioned: 0,
+    Closed: 0,
+  }
+  let whsStuckOver7 = 0
+  let whsClosedWithoutCorrective = 0
+  for (const incident of (whsRows ?? []) as Array<{
+    status?: string
+    incidentDate?: string
+    correctiveAction?: string
+  }>) {
+    const status = incident.status ?? "New"
+    if (status in whsStatusCounts) {
+      whsStatusCounts[status as keyof typeof whsStatusCounts] += 1
+    }
+    const incidentDate = incident.incidentDate ? new Date(incident.incidentDate) : null
+    const ageDays =
+      incidentDate && !Number.isNaN(incidentDate.getTime())
+        ? Math.floor((Date.now() - incidentDate.getTime()) / 86400000)
+        : 0
+    if ((status === "New" || status === "In review") && ageDays > 7) {
+      whsStuckOver7 += 1
+    }
+    if (status === "Closed" && !(incident.correctiveAction ?? "").trim()) {
+      whsClosedWithoutCorrective += 1
+    }
   }
 
   return (
@@ -87,6 +121,30 @@ export default async function ReportsPage() {
             No report data available yet.
           </div>
         )}
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="text-base font-semibold text-slate-900">WHS Incident Lifecycle</h2>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-700 sm:grid-cols-4">
+          <p>New: {whsStatusCounts.New}</p>
+          <p>In review: {whsStatusCounts["In review"]}</p>
+          <p>Actioned: {whsStatusCounts.Actioned}</p>
+          <p>Closed: {whsStatusCounts.Closed}</p>
+        </div>
+        <div className="mt-4 space-y-2 text-sm">
+          <div className="flex items-center gap-2">
+            <Badge variant={whsStuckOver7 > 0 ? "destructive" : "success"}>Stuck &gt; 7 days</Badge>
+            <span className="text-slate-700">{whsStuckOver7} incidents</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant={whsClosedWithoutCorrective > 0 ? "destructive" : "success"}
+            >
+              Closed without corrective action
+            </Badge>
+            <span className="text-slate-700">{whsClosedWithoutCorrective} incidents</span>
+          </div>
+        </div>
       </div>
     </div>
   )

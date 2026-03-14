@@ -19,6 +19,8 @@ model Organisation {
   policies   Policy[]
   certificates Certificate[]
   incidents  WHSIncident[]
+  policyReminderSchedules PolicyReminderSchedule[]
+  policyReminderEvents PolicyReminderEvent[]
 }
 
 model User {
@@ -46,6 +48,7 @@ model Employee {
   acknowledgements PolicyAcknowledgement[]
   rightToWork RightToWork?
   fairWorkChecklist FairWorkChecklist?
+  policyReminderEvents PolicyReminderEvent[]
 }
 
 model Certificate {
@@ -70,6 +73,8 @@ model Policy {
 
   organisation    Organisation          @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   acknowledgements PolicyAcknowledgement[]
+  reminderSchedule PolicyReminderSchedule?
+  reminderEvents PolicyReminderEvent[]
 }
 
 model PolicyAcknowledgement {
@@ -91,11 +96,15 @@ model WHSIncident {
   incidentDate     DateTime @map("incidentDate")
   employeesInvolved String  @map("employeesInvolved")
   correctiveAction String   @map("correctiveAction")
-  status           String   @default("Open")
+  preventionSteps  String?  @map("preventionSteps")
+  assignedTo       String?  @map("assignedTo")
+  dateClosed       DateTime? @map("dateClosed")
+  status           String   @default("New")
   createdAt        DateTime @default(now()) @map("createdAt")
   updatedAt        DateTime @updatedAt @map("updatedAt")
 
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  timeline     WHSIncidentTimeline[]
 }
 
 model RightToWork {
@@ -119,4 +128,51 @@ model FairWorkChecklist {
   updatedAt             DateTime @updatedAt @map("updatedAt")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model WHSIncidentTimeline {
+  id             String   @id @default(cuid())
+  organisationId String   @map("organisationId")
+  incidentId     String   @map("incidentId")
+  eventType      String   @map("eventType")
+  statusFrom     String?  @map("statusFrom")
+  statusTo       String?  @map("statusTo")
+  comment        String? 
+  assignedTo     String?  @map("assignedTo")
+  createdAt      DateTime @default(now()) @map("createdAt")
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  incident     WHSIncident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+}
+
+model PolicyReminderSchedule {
+  id                String   @id @default(cuid())
+  organisationId    String   @map("organisationId")
+  policyId          String   @unique @map("policyId")
+  autoRemindEnabled Boolean  @default(false) @map("autoRemindEnabled")
+  cadenceDays       Int      @default(3) @map("cadenceDays")
+  deadlineAt        DateTime? @map("deadlineAt")
+  nextRunAt         DateTime? @map("nextRunAt")
+  lastRunAt         DateTime? @map("lastRunAt")
+  createdAt         DateTime @default(now()) @map("createdAt")
+  updatedAt         DateTime @updatedAt @map("updatedAt")
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  policy       Policy       @relation(fields: [policyId], references: [id], onDelete: Cascade)
+}
+
+model PolicyReminderEvent {
+  id             String   @id @default(cuid())
+  organisationId String   @map("organisationId")
+  policyId       String   @map("policyId")
+  employeeId     String   @map("employeeId")
+  sentAt         DateTime @default(now()) @map("sentAt")
+  triggerType    String   @default("manual") @map("triggerType")
+  status         String   @default("sent")
+  errorMessage   String?  @map("errorMessage")
+  createdAt      DateTime @default(now()) @map("createdAt")
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  policy       Policy       @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 }

@@ -1,5 +1,7 @@
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { fetchLiveComplianceData, formatDate } from "@/lib/supabase/live-data"
 import type { LiveCertificate, LiveEmployee } from "@/lib/supabase/live-data"
 import { getCertificateAlertBuckets } from "@/lib/compliance/metrics"
@@ -19,7 +21,11 @@ function certVariant(status: string): "success" | "warning" | "destructive" | "n
   return "neutral"
 }
 
-export default async function CertificatesPage() {
+export default async function CertificatesPage({
+  searchParams,
+}: {
+  searchParams?: { success?: string }
+}) {
   const supabase = await createClient()
   const data = await fetchLiveComplianceData(supabase as never)
   const employeeById = new Map<string, LiveEmployee>(
@@ -29,10 +35,20 @@ export default async function CertificatesPage() {
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Certificates</h1>
-        <p className="mt-1 text-sm text-slate-600">Live certificate records from Supabase</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Certificates</h1>
+          <p className="mt-1 text-sm text-slate-600">Live certificate records from Supabase</p>
+        </div>
+        <Button asChild>
+          <Link href="/certificates/new">Add Certificate</Link>
+        </Button>
       </div>
+      {searchParams?.success ? (
+        <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+          Certificate saved successfully.
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-3">
         <Badge variant="destructive">Expired: {alertBuckets.expired}</Badge>
@@ -50,6 +66,7 @@ export default async function CertificatesPage() {
               <th className="px-4 py-3 font-medium">Expiry</th>
               <th className="px-4 py-3 font-medium">Days Left</th>
               <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -64,6 +81,11 @@ export default async function CertificatesPage() {
                   <td className="px-4 py-3 text-slate-600">{days ?? "—"}</td>
                   <td className="px-4 py-3">
                     <Badge variant={certVariant(cert.status)}>{cert.status}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <Link href={`/certificates/${cert.id}/edit`}>Edit</Link>
+                    </Button>
                   </td>
                 </tr>
               )

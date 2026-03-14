@@ -36,6 +36,7 @@ export async function updateSession(request: NextRequest) {
     "/certificates",
     "/policies",
     "/onboarding",
+    "/whs",
     "/whs-incidents",
     "/right-to-work",
     "/fair-work-checklist",

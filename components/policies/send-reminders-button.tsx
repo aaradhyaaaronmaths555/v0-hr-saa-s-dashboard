@@ -12,14 +12,27 @@ type ReminderResponse = {
   }
 }
 
-export function SendRemindersButton() {
+type SendRemindersButtonProps = {
+  policyId?: string
+}
+
+export function SendRemindersButton({ policyId }: SendRemindersButtonProps) {
   const [isPending, startTransition] = useTransition()
   const [message, setMessage] = useState("")
 
   const handleSend = () => {
     setMessage("")
     startTransition(async () => {
-      const response = await fetch("/api/policies/reminders", { method: "POST" })
+      const response = await fetch("/api/policies/reminders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: "send_now",
+          policyId,
+        }),
+      })
       const payload = (await response.json()) as ReminderResponse
       if (!response.ok || !payload.summary) {
         setMessage("Failed to send reminders.")
@@ -33,8 +46,8 @@ export function SendRemindersButton() {
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <Button type="button" variant="outline" onClick={handleSend} disabled={isPending}>
-        {isPending ? "Sending reminders..." : "Send Policy Reminders"}
+      <Button type="button" onClick={handleSend} disabled={isPending}>
+        {isPending ? "Sending reminders..." : "Send reminders"}
       </Button>
       {message ? <p className="text-xs text-slate-500">{message}</p> : null}
     </div>

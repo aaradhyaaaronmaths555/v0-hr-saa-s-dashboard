@@ -6,10 +6,10 @@ import type {
   LivePolicyAcknowledgement,
 } from "@/lib/supabase/live-data"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle2, FileText, TriangleAlert, Inbox } from "lucide-react"
+import { CheckCircle2, FileText, TriangleAlert, Inbox, BellRing } from "lucide-react"
 
 type ActivityItem = {
-  type: "ack" | "certificate" | "incident"
+  type: "ack" | "certificate" | "incident" | "reminder"
   text: string
   at: string
 }
@@ -62,6 +62,14 @@ export async function RecentActivity({ showEmpty = false }: RecentActivityProps)
     .order("createdAt", { ascending: false })
     .limit(10)
 
+  const { data: reminderRows } = await supabase
+    .from("PolicyReminderEvent")
+    .select("policyId,employeeId,sentAt,status")
+    .eq("organisationId", data.organisationId)
+    .eq("status", "sent")
+    .order("sentAt", { ascending: false })
+    .limit(10)
+
   const ackEvents: ActivityItem[] = data.acknowledgements
     .filter((ack: LivePolicyAcknowledgement) => !!ack.acknowledgedAt)
     .map((ack: LivePolicyAcknowledgement) => ({
@@ -86,7 +94,15 @@ export async function RecentActivity({ showEmpty = false }: RecentActivityProps)
     })
   )
 
-  const merged = [...ackEvents, ...certificateEvents, ...incidentEvents]
+  const reminderEvents: ActivityItem[] = (reminderRows ?? []).map(
+    (row: { policyId: string; employeeId: string; sentAt: string }) => ({
+      type: "reminder",
+      text: `Reminder sent to ${employeeById.get(row.employeeId) ?? "Employee"} for ${policyById.get(row.policyId) ?? "policy"}`,
+      at: row.sentAt,
+    })
+  )
+
+  const merged = [...ackEvents, ...certificateEvents, ...incidentEvents, ...reminderEvents]
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
     .slice(0, 10)
 
@@ -110,6 +126,7 @@ export async function RecentActivity({ showEmpty = false }: RecentActivityProps)
                   {activity.type === "ack" && <CheckCircle2 className="h-4 w-4 text-success" />}
                   {activity.type === "certificate" && <FileText className="h-4 w-4 text-primary" />}
                   {activity.type === "incident" && <TriangleAlert className="h-4 w-4 text-warning" />}
+                  {activity.type === "reminder" && <BellRing className="h-4 w-4 text-slate-600" />}
                 </div>
                 <div className="flex flex-1 flex-col gap-1 pt-0.5">
                   <span className="text-sm text-slate-600">{activity.text}</span>
