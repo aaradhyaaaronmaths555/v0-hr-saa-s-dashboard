@@ -1,6 +1,11 @@
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
-import { fetchLiveComplianceData } from "@/lib/supabase/live-data"
+import {
+  fetchLiveComplianceData,
+  getFairWorkChecklistForOrg,
+  getPoliciesForOrg,
+  getWHSIncidentsForOrg,
+} from "@/lib/supabase/live-data"
 import {
   getDaysUntil,
   getEmployeeComplianceScores,
@@ -12,6 +17,8 @@ import type {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/shared/empty-state"
+import { PageHeader } from "@/components/shared/page-header"
 
 type RiskRow = {
   id: string
@@ -37,12 +44,16 @@ export default async function DashboardPage() {
     data.employees.map((employee: LiveEmployee) => [employee.id, employee] as const)
   )
 
-  const { data: fairWorkRows } = await supabase.from("FairWorkChecklist").select("*")
-  const { data: whsRows } = await supabase
-    .from("WHSIncident")
-    .select("*")
-    .order("incidentDate", { ascending: false })
-  const { data: policyRows } = await supabase.from("Policy").select("*")
+  const employeeIds = new Set(
+    data.employees.map((employee: LiveEmployee) => employee.id)
+  )
+  const [fairWorkRows, whsRows, policyRows] = data.organisationId
+    ? await Promise.all([
+        getFairWorkChecklistForOrg(supabase as never, employeeIds),
+        getWHSIncidentsForOrg(supabase as never, data.organisationId),
+        getPoliciesForOrg(supabase as never, data.organisationId),
+      ])
+    : [[], [], []]
 
   const scores = getEmployeeComplianceScores(
     data.employees,
@@ -57,7 +68,7 @@ export default async function DashboardPage() {
       : 0
 
   const checklistByEmployee = new Map(
-    (fairWorkRows ?? []).map((row: { employeeId: string }) => [row.employeeId, row])
+    fairWorkRows.map((row) => [row.employeeId, row] as const)
   )
   const fairWorkRatios = data.employees.map((employee: LiveEmployee) => {
     const checklist = checklistByEmployee.get(employee.id) as
@@ -81,7 +92,7 @@ export default async function DashboardPage() {
         )
       : 0
 
-  const activeIncidentCount = ((whsRows ?? []) as Array<{ status?: string }>).filter(
+  const activeIncidentCount = whsRows.filter(
     (item) => (item.status ?? "New") !== "Closed"
   ).length
   const incidentComponent = Math.max(100 - activeIncidentCount * 20, 0)
@@ -89,6 +100,15 @@ export default async function DashboardPage() {
     employeeAverage * 0.5 + fairWorkAverage * 0.3 + incidentComponent * 0.2
   )
   const scoreLabel = getScoreLabel(organisationScore)
+  const expiringCertificateCount = data.certificates.filter((cert) => {
+    const days = getDaysUntil(cert.expiryDate)
+    return cert.status === "Expired" || (days !== null && days <= 90)
+  }).length
+  const unacknowledgedPoliciesCount = Math.max(
+    data.policies.length * data.employees.length -
+      data.acknowledgements.filter((ack) => !!ack.acknowledgedAt).length,
+    0
+  )
 
   const risks: RiskRow[] = []
 
@@ -145,7 +165,7 @@ export default async function DashboardPage() {
   // 3) Policies unacknowledged past deadline
   // Deadline rule: 14 days from policy creation.
   const policyCreatedById = new Map(
-    (policyRows ?? []).map((row: { id: string; createdAt?: string }) => [row.id, row.createdAt ?? null])
+    policyRows.map((row) => [row.id, row.createdAt ?? null] as const)
   )
   for (const policy of data.policies) {
     const createdAt = policyCreatedById.get(policy.id)
@@ -179,13 +199,7 @@ export default async function DashboardPage() {
   }
 
   // 4) WHS lifecycle risks
-  for (const incident of (whsRows ?? []) as Array<{
-    id: string
-    incidentType?: string
-    status?: string
-    incidentDate?: string
-    correctiveAction?: string
-  }>) {
+  for (const incident of whsRows) {
     const status = incident.status ?? "New"
     const loggedAt = incident.incidentDate ? new Date(incident.incidentDate) : null
     const ageDays =
@@ -240,69 +254,160 @@ export default async function DashboardPage() {
     .slice(0, 20)
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">
-          Compliance Control Centre
-        </h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Are we compliant, and what needs action now?
-        </p>
-      </div>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Compliance Control Centre"
+        description="See your current risk level and the next actions to stay compliant."
+        action={
+          <Button asChild>
+            <Link href="/employees/new">Add Employee</Link>
+          </Button>
+        }
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Organisation Compliance Score</CardTitle>
-        </CardHeader>
-        <CardContent className="flex items-center justify-between">
-          <div className="flex items-end gap-2">
-            <span className="text-4xl font-bold text-slate-900">
-              {organisationScore}
-            </span>
-            <span className="pb-1 text-sm text-slate-500">/100</span>
-          </div>
-          <Badge variant={scoreLabel.variant}>{scoreLabel.label}</Badge>
-        </CardContent>
-      </Card>
+      {data.employees.length === 0 ? (
+        <Card>
+          <CardContent className="p-2">
+            <EmptyState
+              title="No employees added yet"
+              description="Start by adding your team so PeopleDesk can calculate compliance and show risks."
+              actionLabel="Add Employee"
+              actionHref="/employees/new"
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Today&apos;s Risks</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {todayRisks.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-              No urgent risks found right now.
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Total Employees
+            </p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+              {data.employees.length}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Expiring/Expired Certs
+            </p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+              {expiringCertificateCount}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Unacknowledged Policies
+            </p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+              {unacknowledgedPoliciesCount}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Open WHS Incidents
+            </p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+              {activeIncidentCount}
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-1">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold tracking-tight text-slate-900">
+              Organisation Compliance Score
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-end gap-2">
+                <span className="text-5xl font-semibold tracking-tight text-slate-900">
+                  {organisationScore}
+                </span>
+                <span className="pb-1 text-base text-slate-500">/100</span>
+              </div>
+              <Badge variant={scoreLabel.variant}>{scoreLabel.label}</Badge>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {todayRisks.map((risk) => (
-                <div
-                  key={risk.id}
-                  className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant={risk.severity === "high" ? "destructive" : "warning"}
-                      >
-                        {risk.category}
-                      </Badge>
-                      <span className="truncate text-sm font-medium text-slate-900">
-                        {risk.title}
-                      </span>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <p className="font-medium text-slate-900">How this score is calculated</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                <p className="text-sm">
+                  <span className="block text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Employee compliance
+                  </span>
+                  <span className="text-base font-semibold text-slate-900">{employeeAverage}%</span>{" "}
+                  <span className="text-slate-600">(50%)</span>
+                </p>
+                <p className="text-sm">
+                  <span className="block text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Fair Work checklist
+                  </span>
+                  <span className="text-base font-semibold text-slate-900">{fairWorkAverage}%</span>{" "}
+                  <span className="text-slate-600">(30%)</span>
+                </p>
+                <p className="text-sm">
+                  <span className="block text-xs font-medium uppercase tracking-wide text-slate-500">
+                    WHS incident health
+                  </span>
+                  <span className="text-base font-semibold text-slate-900">{incidentComponent}%</span>{" "}
+                  <span className="text-slate-600">(20%)</span>
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="xl:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold tracking-tight text-slate-900">
+              Today&apos;s Risks
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {todayRisks.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                No urgent risks right now. Keep employee records, certificates, and policies up to date.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {todayRisks.map((risk) => (
+                  <div
+                    key={risk.id}
+                    className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={risk.severity === "high" ? "destructive" : "warning"}
+                        >
+                          {risk.category}
+                        </Badge>
+                        <span className="truncate text-sm font-medium text-slate-900">
+                          {risk.title}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600">{risk.detail}</p>
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">{risk.detail}</p>
+                    <Button asChild className="w-full sm:w-auto sm:shrink-0">
+                      <Link href={risk.href}>{risk.actionLabel}</Link>
+                    </Button>
                   </div>
-                  <Button asChild className="shrink-0">
-                    <Link href={risk.href}>{risk.actionLabel}</Link>
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </section>
     </div>
   )
 }

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server"
+import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { getCurrentOrganisationId } from "@/lib/supabase/live-data"
 import { requireUserAndOrganisation } from "@/lib/supabase/auth-context"
 import { getWriteClient } from "@/lib/supabase/write-client"
 import {
   jsonBadRequest,
   jsonCreated,
   jsonNotFound,
+  jsonOk,
   jsonServerError,
 } from "@/lib/api/responses"
 
@@ -40,10 +41,34 @@ function hasText(value: string | undefined) {
   return !!value && value.trim().length > 0
 }
 
+function readOrganisationId(row: Record<string, unknown> | null | undefined): string {
+  if (!row) return ""
+  const camel = row.organisationId
+  if (typeof camel === "string" && camel.length > 0) return camel
+  const snake = row.organisation_id
+  if (typeof snake === "string" && snake.length > 0) return snake
+  return ""
+}
+
+async function deleteTimelineForIncident(db: any, incidentId: string) {
+  const attempts = [
+    () => db.from("WHSIncidentTimeline").delete().eq("incidentId", incidentId),
+    () => db.from("WHSIncidentTimeline").delete().eq("incident_id", incidentId),
+  ]
+  for (const attempt of attempts) {
+    const { error } = await attempt()
+    if (!error) return null
+    if (error.code === "42P01" || error.code === "42703") continue
+    return error
+  }
+  return null
+}
+
 export async function GET() {
   const supabase = await createClient()
-  const organisationId = await getCurrentOrganisationId(supabase as never)
-  if (!organisationId) return NextResponse.json({ items: [] })
+  const auth = await requireUserAndOrganisation(supabase as never)
+  if (!auth.ok) return auth.response
+  const organisationId = auth.organisationId
 
   const { data: incidents, error } = await supabase
     .from("WHSIncident")
@@ -314,5 +339,68 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ item: updated })
   } catch (error) {
     return jsonServerError(error, "Failed to update WHS incident")
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const supabase = await createClient()
+    const auth = await requireUserAndOrganisation(supabase as never)
+    if (!auth.ok) return auth.response
+    const db = getWriteClient(supabase as never)
+
+    const body = (await request.json()) as {
+      incidentId?: string
+    }
+
+    if (!body.incidentId) {
+      return jsonBadRequest("incidentId is required")
+    }
+
+    const { data: existing, error: existingError } = await db
+      .from("WHSIncident")
+      .select("*")
+      .eq("id", body.incidentId)
+      .maybeSingle()
+
+    if (existingError) {
+      return jsonServerError(existingError.message, "Failed to load WHS incident")
+    }
+    if (!existing) {
+      return jsonNotFound("Incident not found")
+    }
+    if (
+      readOrganisationId(
+        (existing ?? null) as Record<string, unknown> | null | undefined
+      ) !== auth.organisationId
+    ) {
+      return jsonNotFound("Incident not found")
+    }
+
+    const timelineDeleteError = await deleteTimelineForIncident(db, body.incidentId)
+    if (timelineDeleteError) {
+      return jsonServerError(
+        timelineDeleteError.message,
+        "Failed to delete incident timeline"
+      )
+    }
+
+    const { error: deleteError } = await db
+      .from("WHSIncident")
+      .delete()
+      .eq("id", body.incidentId)
+
+    if (deleteError) {
+      return jsonServerError(deleteError.message, "Failed to delete incident")
+    }
+
+    revalidatePath("/whs")
+    revalidatePath("/whs-incidents")
+    revalidatePath("/dashboard")
+    revalidatePath("/reports")
+
+    return jsonOk({ ok: true })
+  } catch (error) {
+    return jsonServerError(error, "Failed to delete incident")
   }
 }

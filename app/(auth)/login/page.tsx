@@ -19,23 +19,19 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const registered = searchParams.get("registered") === "true"
-  const needsConfirm = searchParams.get("confirm") === "true"
   const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard"
 
   const [loading, setLoading] = useState(false)
-  const [resending, setResending] = useState(false)
-  const [emailInput, setEmailInput] = useState("")
   const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<string | null>(null)
 
   function getLoginErrorMessage(message: string | undefined) {
     const normalized = (message ?? "").toLowerCase()
 
     if (normalized.includes("email not confirmed")) {
-      return "Your email is not confirmed yet. Confirm your email, then sign in."
+      return "Login failed. Please check your email and password and try again."
     }
     if (normalized.includes("invalid login credentials")) {
-      return "Invalid email or password. If you just registered, confirm your email first."
+      return "Invalid email or password."
     }
 
     return message ?? "Something went wrong. Please try again."
@@ -44,7 +40,6 @@ function LoginForm() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
-    setInfo(null)
     setLoading(true)
     const form = e.currentTarget
     const formData = new FormData(form)
@@ -64,33 +59,6 @@ function LoginForm() {
       setError("Something went wrong. Please try again.")
     } finally {
       setLoading(false)
-    }
-  }
-
-  async function handleResendConfirmation() {
-    if (!emailInput) {
-      setError("Enter your email first, then resend confirmation.")
-      return
-    }
-
-    setError(null)
-    setInfo(null)
-    setResending(true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email: emailInput,
-      })
-      if (error) {
-        setError(error.message ?? "Could not resend confirmation email.")
-        return
-      }
-      setInfo("Confirmation email sent. Please check your inbox.")
-    } catch {
-      setError("Could not resend confirmation email.")
-    } finally {
-      setResending(false)
     }
   }
 
@@ -116,13 +84,7 @@ function LoginForm() {
           <CardContent>
             {registered && (
               <div className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                Account created!
-                {needsConfirm ? " Please confirm your email, then sign in." : " Please sign in."}
-              </div>
-            )}
-            {info && (
-              <div className="mb-4 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                {info}
+                Account created successfully. Please sign in.
               </div>
             )}
             {error && (
@@ -139,8 +101,6 @@ function LoginForm() {
                   type="email"
                   placeholder="you@company.com.au"
                   autoComplete="email"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
                   required
                 />
               </div>
@@ -157,15 +117,6 @@ function LoginForm() {
               </div>
               <Button type="submit" className="mt-2 w-full" disabled={loading}>
                 {loading ? "Signing in…" : "Sign in"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={handleResendConfirmation}
-                disabled={resending}
-              >
-                {resending ? "Sending confirmation…" : "Resend confirmation email"}
               </Button>
             </form>
           </CardContent>

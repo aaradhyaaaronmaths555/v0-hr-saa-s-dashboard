@@ -24,7 +24,7 @@ const problems = [
 
 export function Problems() {
   return (
-    <section className="bg-muted px-6 py-20">
+    <section className="bg-muted px-4 py-16 sm:px-6 sm:py-20">
       <div className="mx-auto max-w-6xl">
         <div className="mb-12 text-center">
           <h2 className="text-balance text-2xl font-bold text-foreground md:text-3xl">
@@ -34,7 +34,7 @@ export function Problems() {
             These are the problems small business owners face every day.
           </p>
         </div>
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {problems.map((problem) => (
             <Card key={problem.title} className="border-border bg-background">
               <CardContent className="flex flex-col gap-4">

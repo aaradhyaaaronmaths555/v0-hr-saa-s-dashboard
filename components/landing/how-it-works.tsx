@@ -25,7 +25,7 @@ const steps = [
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="px-6 py-20">
+    <section id="how-it-works" className="px-4 py-16 sm:px-6 sm:py-20">
       <div className="mx-auto max-w-6xl">
         <div className="mb-12 text-center">
           <h2 className="text-balance text-2xl font-bold text-foreground md:text-3xl">
@@ -35,7 +35,7 @@ export function HowItWorks() {
             Get your team set up in three simple steps.
           </p>
         </div>
-        <div className="grid gap-10 md:grid-cols-3">
+        <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-3">
           {steps.map((step) => (
             <div key={step.number} className="flex flex-col gap-4">
               <div className="flex items-center gap-4">

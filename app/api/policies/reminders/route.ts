@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { fetchLiveComplianceData } from "@/lib/supabase/live-data"
 import type { LiveEmployee, LivePolicy } from "@/lib/supabase/live-data"
 import { requireUserAndOrganisation } from "@/lib/supabase/auth-context"
+import { getWriteClient } from "@/lib/supabase/write-client"
 import {
   jsonBadRequest,
   jsonForbidden,
@@ -284,6 +285,7 @@ export async function PATCH(request: Request) {
     const supabase = await createClient()
     const auth = await requireUserAndOrganisation(supabase as never)
     if (!auth.ok) return auth.response
+    const db = getWriteClient(supabase as never)
     const data = await fetchLiveComplianceData(supabase as never)
     if (!data.organisationId) {
       return jsonForbidden("No organisation linked to user")
@@ -309,22 +311,43 @@ export async function PATCH(request: Request) {
   defaultDeadline.setDate(defaultDeadline.getDate() + 30)
   const nowIso = new Date().toISOString()
 
-    const payload = {
-      organisationId: auth.organisationId,
-      policyId: policy.id,
-      autoRemindEnabled: body.autoRemindEnabled,
-      cadenceDays,
-      deadlineAt: defaultDeadline.toISOString(),
-      nextRunAt: body.autoRemindEnabled ? getNextRunFromCadence(cadenceDays) : null,
-      updatedAt: nowIso,
+    const payloadVariants: Array<Record<string, unknown>> = [
+      {
+        organisationId: auth.organisationId,
+        policyId: policy.id,
+        autoRemindEnabled: body.autoRemindEnabled,
+        cadenceDays,
+        deadlineAt: defaultDeadline.toISOString(),
+        nextRunAt: body.autoRemindEnabled ? getNextRunFromCadence(cadenceDays) : null,
+        updatedAt: nowIso,
+      },
+      {
+        organisation_id: auth.organisationId,
+        policy_id: policy.id,
+        auto_remind_enabled: body.autoRemindEnabled,
+        cadence_days: cadenceDays,
+        deadline_at: defaultDeadline.toISOString(),
+        next_run_at: body.autoRemindEnabled ? getNextRunFromCadence(cadenceDays) : null,
+        updated_at: nowIso,
+      },
+    ]
+    const onConflictColumns = ["policyId", "policy_id"]
+    let saved = false
+    let lastError = "Failed to update reminder settings"
+    for (const onConflict of onConflictColumns) {
+      for (const payload of payloadVariants) {
+        const { error } = await db
+          .from("PolicyReminderSchedule")
+          .upsert(payload, { onConflict })
+        if (!error) {
+          saved = true
+          break
+        }
+        lastError = error.message || lastError
+      }
+      if (saved) break
     }
-
-    const { error } = await supabase
-      .from("PolicyReminderSchedule")
-      .upsert(payload, { onConflict: "policyId" })
-    if (error) {
-      return jsonServerError(error.message, "Failed to update reminder settings")
-    }
+    if (!saved) return jsonServerError(lastError, "Failed to update reminder settings")
 
     return NextResponse.json({ ok: true })
   } catch (error) {

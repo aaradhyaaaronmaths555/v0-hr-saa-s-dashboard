@@ -4,13 +4,13 @@ import { Button } from "@/components/ui/button"
 
 export function Hero() {
   return (
-    <section className="px-6 py-20 md:py-28">
-      <div className="mx-auto flex max-w-6xl flex-col items-center gap-12 md:flex-row md:gap-16">
+    <section className="px-4 py-16 sm:px-6 sm:py-20 md:py-24">
+      <div className="mx-auto flex max-w-6xl flex-col items-center gap-10 md:flex-row md:gap-14">
         <div className="flex flex-1 flex-col gap-6">
-          <h1 className="text-balance text-4xl font-bold leading-tight tracking-tight text-foreground md:text-5xl lg:text-6xl">
+          <h1 className="text-balance text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl md:text-5xl lg:text-6xl">
             HR sorted for your team in minutes
           </h1>
-          <p className="max-w-lg text-pretty text-lg leading-relaxed text-muted-foreground">
+          <p className="max-w-lg text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
             Track onboarding, policies, and compliance without spreadsheets. Built for small Australian businesses.
           </p>
           <div className="flex flex-wrap items-center gap-4">
@@ -28,7 +28,7 @@ export function Hero() {
           </div>
         </div>
         <div className="flex flex-1 justify-center">
-          <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-border shadow-2xl">
+          <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-border shadow-lg">
             <Image
               src="/images/dashboard-mockup.jpg"
               alt="PeopleDesk dashboard showing employee management interface"

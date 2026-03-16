@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server"
 import {
   fetchLiveComplianceData,
   formatDate,
+  getPoliciesForOrg,
+  getWHSIncidentsForOrg,
   type LiveCertificate,
   type LiveEmployee,
   type LivePolicy,
@@ -10,20 +12,6 @@ import {
 import { getDaysUntil } from "@/lib/compliance/metrics"
 import { AuditPrintControls } from "@/components/reports/audit-print-controls"
 
-type IncidentRow = {
-  id: string
-  incidentType?: string
-  status?: string
-  incidentDate?: string
-  employeesInvolved?: string
-}
-
-type PolicyRow = {
-  id: string
-  title?: string
-  createdAt?: string
-}
-
 function normalizeCertificateStatus(status: string, expiryDate: string | null) {
   const days = getDaysUntil(expiryDate)
   if (status === "Expired" || (days !== null && days < 0)) return "expired"
@@ -31,7 +19,7 @@ function normalizeCertificateStatus(status: string, expiryDate: string | null) {
   return "valid"
 }
 
-function parseEmployeesInvolved(value: string | undefined) {
+function parseEmployeesInvolved(value: string | null | undefined) {
   if (!value) return []
   return value
     .split(/[,;\n]/g)
@@ -42,22 +30,18 @@ function parseEmployeesInvolved(value: string | undefined) {
 export default async function AuditExportPage({
   searchParams,
 }: {
-  searchParams?: { print?: string }
+  searchParams?: Promise<{ print?: string }>
 }) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined
   const supabase = await createClient()
   const data = await fetchLiveComplianceData(supabase as never)
 
-  const { data: incidentRowsRaw } = await supabase
-    .from("WHSIncident")
-    .select("id,incidentType,status,incidentDate,employeesInvolved")
-    .order("incidentDate", { ascending: false })
-
-  const { data: policyRowsRaw } = await supabase
-    .from("Policy")
-    .select("id,title,createdAt")
-
-  const incidents = (incidentRowsRaw ?? []) as IncidentRow[]
-  const policyRows = (policyRowsRaw ?? []) as PolicyRow[]
+  const [incidents, policyRows] = data.organisationId
+    ? await Promise.all([
+        getWHSIncidentsForOrg(supabase as never, data.organisationId),
+        getPoliciesForOrg(supabase as never, data.organisationId),
+      ])
+    : [[], []]
 
   const acknowledgementsByEmployee = new Map<string, LivePolicyAcknowledgement[]>()
   for (const ack of data.acknowledgements) {
@@ -78,7 +62,7 @@ export default async function AuditExportPage({
     policyById.set(policy.id, policy.title)
   }
 
-  const incidentsByEmployee = new Map<string, IncidentRow[]>()
+  const incidentsByEmployee = new Map<string, Array<(typeof incidents)[number]>>()
   for (const incident of incidents) {
     const involved = parseEmployeesInvolved(incident.employeesInvolved)
     if (involved.length === 0) continue
@@ -137,11 +121,11 @@ export default async function AuditExportPage({
     incidentStatusCount.set(status, (incidentStatusCount.get(status) ?? 0) + 1)
   }
 
-  const autoPrint = searchParams?.print === "1"
+  const autoPrint = resolvedSearchParams?.print === "1"
   const generatedAt = new Date().toLocaleString("en-AU")
 
   return (
-    <div className="min-h-svh bg-white px-8 py-6">
+    <div className="min-h-svh bg-white px-4 py-6 sm:px-6 lg:px-8">
       <AuditPrintControls autoPrint={autoPrint} />
 
       <h2 className="text-xl font-semibold text-slate-900">Evidence of Compliance</h2>
@@ -296,7 +280,7 @@ export default async function AuditExportPage({
           <li>Unacknowledged policies past deadline: {unackPastDeadline}</li>
           <li>
             Open WHS incidents:{" "}
-            {(incidents as IncidentRow[]).filter((item) => (item.status ?? "Open") !== "Closed")
+            {incidents.filter((item) => (item.status ?? "Open") !== "Closed")
               .length}
           </li>
         </ul>

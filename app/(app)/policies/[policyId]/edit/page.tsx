@@ -20,6 +20,10 @@ export default function EditPolicyPage() {
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState("")
+  const [fieldErrors, setFieldErrors] = useState<{
+    title?: string
+    description?: string
+  }>({})
 
   useEffect(() => {
     const load = async () => {
@@ -42,10 +46,23 @@ export default function EditPolicyPage() {
     event.preventDefault()
     setLoading(true)
     setError("")
+    setFieldErrors({})
     const formData = new FormData(event.currentTarget)
+    const title = String(formData.get("title") ?? "").trim()
+    const description = String(formData.get("description") ?? "").trim()
+    const nextFieldErrors: { title?: string; description?: string } = {}
+    if (!title) nextFieldErrors.title = "Policy title is required."
+    if (description && description.length > 5000) {
+      nextFieldErrors.description = "Description is too long."
+    }
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors)
+      setLoading(false)
+      return
+    }
     const payload = {
-      title: String(formData.get("title") ?? ""),
-      description: String(formData.get("description") ?? ""),
+      title,
+      description,
     }
     const response = await fetch(`/api/policies/${params.policyId}`, {
       method: "PATCH",
@@ -70,17 +87,35 @@ export default function EditPolicyPage() {
         <p className="mt-1 text-sm text-slate-600">Update policy content.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid max-w-xl gap-3 rounded-xl border border-slate-200 bg-white p-4">
-        <Input name="title" placeholder="Policy title" defaultValue={policy?.title ?? ""} required />
-        <Textarea
-          name="description"
-          placeholder="Policy description"
-          defaultValue={policy?.description ?? ""}
-        />
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white p-4 sm:p-6"
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-1 md:col-span-2">
+            <Input
+              name="title"
+              placeholder="Policy title"
+              defaultValue={policy?.title ?? ""}
+              className="w-full"
+              required
+            />
+            {fieldErrors.title ? <p className="text-sm text-red-600">{fieldErrors.title}</p> : null}
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <Textarea
+              name="description"
+              placeholder="Policy description"
+              defaultValue={policy?.description ?? ""}
+              className="w-full"
+            />
+            {fieldErrors.description ? <p className="text-sm text-red-600">{fieldErrors.description}</p> : null}
+          </div>
+        </div>
 
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
-        <div className="flex gap-2">
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row">
           <Button type="submit" disabled={loading}>
             {loading ? "Saving..." : "Save Changes"}
           </Button>

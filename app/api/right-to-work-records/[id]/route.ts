@@ -1,17 +1,30 @@
-import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { getCurrentOrganisationId } from "@/lib/supabase/live-data"
 import { requireUserAndOrganisation } from "@/lib/supabase/auth-context"
 import {
   jsonBadRequest,
+  jsonOk,
   jsonNotFound,
   jsonServerError,
 } from "@/lib/api/responses"
+import {
+  buildVisaTypeFromResidency,
+  isResidencyStatus,
+  parseVisaTypeForResidency,
+  type ResidencyStatus,
+} from "@/lib/right-to-work/residency"
 
 type Params = { params: Promise<{ id: string }> }
 
 function isValidDate(value: string) {
   return !Number.isNaN(new Date(value).getTime())
+}
+
+function getStoredVisaExpiryDate(
+  residencyStatus: ResidencyStatus,
+  visaExpiryDate?: string
+): string {
+  // Legacy schemas still enforce NOT NULL on visaExpiryDate.
+  return residencyStatus === "Visa" ? String(visaExpiryDate) : "2099-12-31"
 }
 
 async function fetchRecordForOrg(supabase: any, id: string, organisationId: string) {
@@ -52,15 +65,29 @@ async function fetchRecordForOrg(supabase: any, id: string, organisationId: stri
 }
 
 export async function GET(_: Request, { params }: Params) {
-  const { id } = await params
-  const supabase = await createClient()
-  const organisationId = await getCurrentOrganisationId(supabase as never)
-  if (!organisationId) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 })
+  try {
+    const { id } = await params
+    const supabase = await createClient()
+    const auth = await requireUserAndOrganisation(supabase as never)
+    if (!auth.ok) return auth.response
+    const organisationId = auth.organisationId
 
-  const { data, error } = await fetchRecordForOrg(supabase, id, organisationId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!data) return NextResponse.json({ error: "Right to Work record not found" }, { status: 404 })
-  return NextResponse.json({ item: data })
+    const { data, error } = await fetchRecordForOrg(supabase, id, organisationId)
+    if (error) return jsonServerError(error.message, "Failed to load right to work record")
+    if (!data) return jsonNotFound("Right to Work record not found")
+    const parsed = parseVisaTypeForResidency(
+      (data as { visaType?: string | null }).visaType ?? ""
+    )
+    return jsonOk({
+      item: {
+        ...data,
+        residencyStatus: parsed.residencyStatus,
+        visaSubtype: parsed.visaSubtype,
+      },
+    })
+  } catch (error) {
+    return jsonServerError(error, "Failed to load right to work record")
+  }
 }
 
 export async function PATCH(request: Request, { params }: Params) {
@@ -71,25 +98,40 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!auth.ok) return auth.response
 
     const body = (await request.json()) as {
-      visaType?: string
+      residencyStatus?: string
+      visaSubtype?: string
       visaExpiryDate?: string
     }
-    if (!body.visaType?.trim() || !body.visaExpiryDate) {
-      return jsonBadRequest("Visa type and expiry date are required")
+    if (!isResidencyStatus(body.residencyStatus ?? "")) {
+      return jsonBadRequest("Residency status must be Citizen, PR, or Visa")
     }
-    if (!isValidDate(body.visaExpiryDate)) {
-      return jsonBadRequest("Invalid visa expiry date")
+    const residencyStatus = body.residencyStatus as ResidencyStatus
+    if (residencyStatus === "Visa") {
+      if (!body.visaSubtype?.trim()) {
+        return jsonBadRequest("Visa subtype is required when residency status is Visa")
+      }
+      if (!body.visaExpiryDate || !isValidDate(body.visaExpiryDate)) {
+        return jsonBadRequest("A valid visa expiry date is required for Visa status")
+      }
     }
 
     const existing = await fetchRecordForOrg(supabase, id, auth.organisationId)
     if (existing.error) return jsonServerError(existing.error.message, "Failed to load right to work record")
     if (!existing.data) return jsonNotFound("Right to Work record not found")
 
+    const visaType = buildVisaTypeFromResidency(
+      residencyStatus,
+      body.visaSubtype ?? ""
+    )
+    const storedVisaExpiryDate = getStoredVisaExpiryDate(
+      residencyStatus,
+      body.visaExpiryDate
+    )
     const { data, error } = await supabase
       .from("RightToWork")
       .update({
-        visaType: body.visaType.trim(),
-        visaExpiryDate: body.visaExpiryDate,
+        visaType,
+        visaExpiryDate: storedVisaExpiryDate,
         updatedAt: new Date().toISOString(),
       })
       .eq("id", id)
@@ -97,7 +139,16 @@ export async function PATCH(request: Request, { params }: Params) {
       .single()
 
     if (error) return jsonServerError(error.message, "Failed to update right to work record")
-    return NextResponse.json({ item: data })
+    const parsed = parseVisaTypeForResidency(
+      (data as { visaType?: string | null }).visaType ?? ""
+    )
+    return jsonOk({
+      item: {
+        ...data,
+        residencyStatus: parsed.residencyStatus,
+        visaSubtype: parsed.visaSubtype,
+      },
+    })
   } catch (error) {
     return jsonServerError(error, "Failed to update right to work record")
   }

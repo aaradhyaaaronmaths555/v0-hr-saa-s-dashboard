@@ -6,6 +6,10 @@ import { FormEvent, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
 type EmployeeItem = {
   id: string
   name: string
@@ -21,6 +25,10 @@ export default function EditEmployeePage() {
   const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState("")
   const [employee, setEmployee] = useState<EmployeeItem | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string
+    email?: string
+  }>({})
 
   useEffect(() => {
     const load = async () => {
@@ -44,10 +52,21 @@ export default function EditEmployeePage() {
     event.preventDefault()
     setLoading(true)
     setError("")
+    setFieldErrors({})
     const formData = new FormData(event.currentTarget)
+    const name = String(formData.get("name") ?? "").trim()
+    const email = String(formData.get("email") ?? "").trim()
+    const nextFieldErrors: { name?: string; email?: string } = {}
+    if (!name) nextFieldErrors.name = "Name is required."
+    if (email && !isValidEmail(email)) nextFieldErrors.email = "Enter a valid email address."
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors)
+      setLoading(false)
+      return
+    }
     const payload = {
-      name: String(formData.get("name") ?? ""),
-      email: String(formData.get("email") ?? ""),
+      name,
+      email,
       onboardingStatus: String(formData.get("onboardingStatus") ?? "Not Started"),
     }
     const response = await fetch(`/api/employees/${params.id}`, {
@@ -73,27 +92,47 @@ export default function EditEmployeePage() {
         <p className="mt-1 text-sm text-slate-600">Update employee details.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid max-w-xl gap-3 rounded-xl border border-slate-200 bg-white p-4">
-        <Input name="name" placeholder="Full name" defaultValue={employee?.name ?? ""} required />
-        <Input
-          name="email"
-          type="email"
-          placeholder="Work email"
-          defaultValue={employee?.email ?? ""}
-        />
-        <select
-          name="onboardingStatus"
-          defaultValue={employee?.onboardingStatus ?? employee?.onboarding_status ?? "Not Started"}
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          <option value="Not Started">Not Started</option>
-          <option value="In Progress">In Progress</option>
-          <option value="Complete">Complete</option>
-        </select>
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white p-4 sm:p-6"
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-1 md:col-span-2">
+            <Input
+              name="name"
+              placeholder="Full name"
+              defaultValue={employee?.name ?? ""}
+              className="w-full"
+              required
+            />
+            {fieldErrors.name ? <p className="text-sm text-red-600">{fieldErrors.name}</p> : null}
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <Input
+              name="email"
+              type="email"
+              placeholder="Work email"
+              defaultValue={employee?.email ?? ""}
+              className="w-full"
+            />
+            {fieldErrors.email ? <p className="text-sm text-red-600">{fieldErrors.email}</p> : null}
+          </div>
+          <div className="space-y-1">
+            <select
+              name="onboardingStatus"
+              defaultValue={employee?.onboardingStatus ?? employee?.onboarding_status ?? "Not Started"}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="Not Started">Not Started</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Complete">Complete</option>
+            </select>
+          </div>
+        </div>
 
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
-        <div className="flex gap-2">
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row">
           <Button type="submit" disabled={loading}>
             {loading ? "Saving..." : "Save Changes"}
           </Button>

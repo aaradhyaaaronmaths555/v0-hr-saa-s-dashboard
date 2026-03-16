@@ -6,19 +6,38 @@ import { FormEvent, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
 export default function NewEmployeePage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string
+    email?: string
+  }>({})
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLoading(true)
     setError("")
+    setFieldErrors({})
     const formData = new FormData(event.currentTarget)
+    const name = String(formData.get("name") ?? "").trim()
+    const email = String(formData.get("email") ?? "").trim()
+    const nextFieldErrors: { name?: string; email?: string } = {}
+    if (!name) nextFieldErrors.name = "Name is required."
+    if (email && !isValidEmail(email)) nextFieldErrors.email = "Enter a valid email address."
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors)
+      setLoading(false)
+      return
+    }
     const payload = {
-      name: String(formData.get("name") ?? ""),
-      email: String(formData.get("email") ?? ""),
+      name,
+      email,
       onboardingStatus: String(formData.get("onboardingStatus") ?? "Not Started"),
     }
 
@@ -43,22 +62,35 @@ export default function NewEmployeePage() {
         <p className="mt-1 text-sm text-slate-600">Create a new employee record.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid max-w-xl gap-3 rounded-xl border border-slate-200 bg-white p-4">
-        <Input name="name" placeholder="Full name" required />
-        <Input name="email" type="email" placeholder="Work email" />
-        <select
-          name="onboardingStatus"
-          defaultValue="Not Started"
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          <option value="Not Started">Not Started</option>
-          <option value="In Progress">In Progress</option>
-          <option value="Complete">Complete</option>
-        </select>
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white p-4 sm:p-6"
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-1 md:col-span-2">
+            <Input name="name" placeholder="Full name" className="w-full" required />
+            {fieldErrors.name ? <p className="text-sm text-red-600">{fieldErrors.name}</p> : null}
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <Input name="email" type="email" placeholder="Work email" className="w-full" />
+            {fieldErrors.email ? <p className="text-sm text-red-600">{fieldErrors.email}</p> : null}
+          </div>
+          <div className="space-y-1">
+            <select
+              name="onboardingStatus"
+              defaultValue="Not Started"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="Not Started">Not Started</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Complete">Complete</option>
+            </select>
+          </div>
+        </div>
 
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
-        <div className="flex gap-2">
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row">
           <Button type="submit" disabled={loading}>
             {loading ? "Saving..." : "Create Employee"}
           </Button>

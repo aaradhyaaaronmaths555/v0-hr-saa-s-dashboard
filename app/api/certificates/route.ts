@@ -53,7 +53,10 @@ export async function POST(request: Request) {
     if (!body.employeeId || !body.type?.trim()) {
       return jsonBadRequest("Employee and certificate type are required")
     }
-    if (body.expiryDate && !isValidDate(body.expiryDate)) {
+    if (!body.expiryDate) {
+      return jsonBadRequest("Expiry date is required")
+    }
+    if (!isValidDate(body.expiryDate)) {
       return jsonBadRequest("Invalid expiry date")
     }
 
@@ -65,23 +68,21 @@ export async function POST(request: Request) {
     if (!employeeInOrg) return jsonBadRequest("Invalid employee")
 
     const issueDate = new Date().toISOString()
-    const expiryDate =
-      body.expiryDate ||
-      new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+    const expiryDate = body.expiryDate
 
     const payloadVariants: Array<Record<string, unknown>> = [
       // Current app schema (snake_case)
       {
         employee_id: body.employeeId,
         type: body.type.trim(),
-        expiry_date: body.expiryDate || null,
+        expiry_date: body.expiryDate,
         status: body.status || "Valid",
       },
       // CamelCase variant
       {
         employeeId: body.employeeId,
         type: body.type.trim(),
-        expiryDate: body.expiryDate || null,
+        expiryDate: body.expiryDate,
         status: body.status || "Valid",
       },
       // Legacy schema with required issue/expiry

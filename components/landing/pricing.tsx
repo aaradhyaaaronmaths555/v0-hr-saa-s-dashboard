@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export function Pricing() {
   return (
-    <section id="pricing" className="bg-muted px-6 py-20">
-      <div className="mx-auto max-w-md text-center">
+    <section id="pricing" className="bg-muted px-4 py-16 sm:px-6 sm:py-20">
+      <div className="mx-auto max-w-lg text-center">
         <h2 className="text-balance text-2xl font-bold text-foreground md:text-3xl">
           Simple, transparent pricing
         </h2>

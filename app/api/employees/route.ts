@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { getCurrentOrganisationId } from "@/lib/supabase/live-data"
 import { requireUserAndOrganisation } from "@/lib/supabase/auth-context"
 import { getWriteClient } from "@/lib/supabase/write-client"
+import { getEmployeesForOrg } from "@/lib/supabase/live-data"
 import {
   jsonBadRequest,
   jsonCreated,
@@ -11,30 +11,20 @@ import {
 
 export async function GET() {
   const supabase = await createClient()
-  const organisationId = await getCurrentOrganisationId(supabase as never)
-  if (!organisationId) return NextResponse.json({ items: [] })
+  const auth = await requireUserAndOrganisation(supabase as never)
+  if (!auth.ok) return auth.response
+  const organisationId = auth.organisationId
 
-  const attempts = [
-    () =>
-      supabase
-        .from("Employee")
-        .select("*")
-        .eq("organisation_id", organisationId)
-        .order("name", { ascending: true }),
-    () =>
-      supabase
-        .from("Employee")
-        .select("*")
-        .eq("organisationId", organisationId)
-        .order("name", { ascending: true }),
-  ]
-
-  for (const attempt of attempts) {
-    const { data, error } = await attempt()
-    if (!error) return NextResponse.json({ items: data ?? [] })
+  try {
+    const employees = await getEmployeesForOrg(supabase as never, organisationId)
+    const items = employees.map((employee) => ({
+      id: employee.id,
+      name: employee.name?.trim() || "Unnamed Employee",
+    }))
+    return NextResponse.json({ items })
+  } catch (error) {
+    return jsonServerError(error, "Failed to load employees")
   }
-
-  return NextResponse.json({ error: "Failed to load employees" }, { status: 500 })
 }
 
 export async function POST(request: Request) {

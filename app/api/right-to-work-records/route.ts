@@ -2,9 +2,22 @@ import { createClient } from "@/lib/supabase/server"
 import { requireUserAndOrganisation } from "@/lib/supabase/auth-context"
 import { jsonBadRequest, jsonCreated, jsonServerError } from "@/lib/api/responses"
 import { getWriteClient } from "@/lib/supabase/write-client"
+import {
+  buildVisaTypeFromResidency,
+  isResidencyStatus,
+  type ResidencyStatus,
+} from "@/lib/right-to-work/residency"
 
 function isValidDate(value: string) {
   return !Number.isNaN(new Date(value).getTime())
+}
+
+function getStoredVisaExpiryDate(
+  residencyStatus: ResidencyStatus,
+  visaExpiryDate?: string
+): string {
+  // Legacy schemas still enforce NOT NULL on visaExpiryDate.
+  return residencyStatus === "Visa" ? String(visaExpiryDate) : "2099-12-31"
 }
 
 async function employeeExistsInOrg(supabase: any, employeeId: string, organisationId: string) {
@@ -40,15 +53,25 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       employeeId?: string
-      visaType?: string
+      residencyStatus?: string
+      visaSubtype?: string
       visaExpiryDate?: string
     }
 
-    if (!body.employeeId || !body.visaType?.trim() || !body.visaExpiryDate) {
-      return jsonBadRequest("Employee, visa type and expiry date are required")
+    if (!body.employeeId) {
+      return jsonBadRequest("Employee is required")
     }
-    if (!isValidDate(body.visaExpiryDate)) {
-      return jsonBadRequest("Invalid visa expiry date")
+    if (!isResidencyStatus(body.residencyStatus ?? "")) {
+      return jsonBadRequest("Residency status must be Citizen, PR, or Visa")
+    }
+    const residencyStatus = body.residencyStatus as ResidencyStatus
+    if (residencyStatus === "Visa") {
+      if (!body.visaSubtype?.trim()) {
+        return jsonBadRequest("Visa subtype is required when residency status is Visa")
+      }
+      if (!body.visaExpiryDate || !isValidDate(body.visaExpiryDate)) {
+        return jsonBadRequest("A valid visa expiry date is required for Visa status")
+      }
     }
 
     const employeeInOrg = await employeeExistsInOrg(
@@ -58,12 +81,20 @@ export async function POST(request: Request) {
     )
     if (!employeeInOrg) return jsonBadRequest("Invalid employee")
 
+    const visaType = buildVisaTypeFromResidency(
+      residencyStatus,
+      body.visaSubtype ?? ""
+    )
+    const storedVisaExpiryDate = getStoredVisaExpiryDate(
+      residencyStatus,
+      body.visaExpiryDate
+    )
     const { data, error } = await db
       .from("RightToWork")
       .insert({
         employeeId: body.employeeId,
-        visaType: body.visaType.trim(),
-        visaExpiryDate: body.visaExpiryDate,
+        visaType,
+        visaExpiryDate: storedVisaExpiryDate,
       })
       .select("*")
       .single()

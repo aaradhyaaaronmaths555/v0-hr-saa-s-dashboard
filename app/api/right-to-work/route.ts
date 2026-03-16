@@ -1,58 +1,59 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { fetchLiveComplianceData } from "@/lib/supabase/live-data"
+import {
+  getEmployeesForOrg,
+  getRightToWorkForOrg,
+} from "@/lib/supabase/live-data"
 import { requireUserAndOrganisation } from "@/lib/supabase/auth-context"
 import { jsonBadRequest, jsonServerError } from "@/lib/api/responses"
 import { getWriteClient } from "@/lib/supabase/write-client"
+import {
+  buildVisaTypeFromResidency,
+  isResidencyStatus,
+  parseVisaTypeForResidency,
+  type ResidencyStatus,
+} from "@/lib/right-to-work/residency"
 
 function isValidDate(value: string) {
   return !Number.isNaN(new Date(value).getTime())
 }
 
-async function employeeExistsInOrg(supabase: any, employeeId: string, organisationId: string) {
-  const attempts = [
-    () =>
-      supabase
-        .from("Employee")
-        .select("id")
-        .eq("id", employeeId)
-        .eq("organisation_id", organisationId)
-        .maybeSingle(),
-    () =>
-      supabase
-        .from("Employee")
-        .select("id")
-        .eq("id", employeeId)
-        .eq("organisationId", organisationId)
-        .maybeSingle(),
-  ]
-  for (const attempt of attempts) {
-    const { data, error } = await attempt()
-    if (!error && data) return true
-  }
-  return false
+function getStoredVisaExpiryDate(
+  residencyStatus: ResidencyStatus,
+  visaExpiryDate?: string
+): string {
+  // Legacy schemas still enforce NOT NULL on visaExpiryDate.
+  return residencyStatus === "Visa" ? String(visaExpiryDate) : "2099-12-31"
+}
+
+function rowOrganisationId(row: Record<string, unknown> | null | undefined): string {
+  if (!row) return ""
+  const camel = row.organisationId
+  if (typeof camel === "string" && camel.length > 0) return camel
+  const snake = row.organisation_id
+  if (typeof snake === "string" && snake.length > 0) return snake
+  return ""
 }
 
 export async function GET() {
   const supabase = await createClient()
-  const data = await fetchLiveComplianceData(supabase as never)
+  const auth = await requireUserAndOrganisation(supabase as never)
+  if (!auth.ok) return auth.response
 
-  const { data: visaRows, error } = await supabase.from("RightToWork").select("*")
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const employees = await getEmployeesForOrg(supabase as never, auth.organisationId)
+  const employeeIds = new Set(employees.map((employee) => employee.id))
+  const visaRows = await getRightToWorkForOrg(supabase as never, employeeIds)
+  const byEmployee = new Map(visaRows.map((row) => [row.employeeId, row] as const))
 
-  const byEmployee = new Map(
-    (visaRows ?? []).map((row: { employeeId: string }) => [row.employeeId, row])
-  )
-
-  const items = data.employees.map((employee: { id: string; name: string }) => {
-    const visa = byEmployee.get(employee.id) as
-      | { id?: string; visaType?: string; visaExpiryDate?: string }
-      | undefined
+  const items = employees.map((employee) => {
+    const visa = byEmployee.get(employee.id)
+    const parsed = parseVisaTypeForResidency(visa?.visaType ?? "")
     return {
       id: visa?.id ?? null,
       employeeId: employee.id,
       employeeName: employee.name,
-      visaType: visa?.visaType ?? "",
+      residencyStatus: parsed.residencyStatus,
+      visaSubtype: parsed.visaSubtype,
       visaExpiryDate: visa?.visaExpiryDate ?? null,
     }
   })
@@ -69,39 +70,93 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       employeeId?: string
-      visaType?: string
+      residencyStatus?: string
+      visaSubtype?: string
       visaExpiryDate?: string
     }
 
-    if (!body.employeeId || !body.visaType?.trim() || !body.visaExpiryDate) {
-      return jsonBadRequest("Missing required fields")
+    if (!body.employeeId) {
+      return jsonBadRequest("Employee is required")
     }
-    if (!isValidDate(body.visaExpiryDate)) {
-      return jsonBadRequest("Invalid visa expiry date")
+    if (!isResidencyStatus(body.residencyStatus ?? "")) {
+      return jsonBadRequest("Residency status must be Citizen, PR, or Visa")
+    }
+    const residencyStatus = body.residencyStatus as ResidencyStatus
+    if (residencyStatus === "Visa") {
+      if (!body.visaSubtype?.trim()) {
+        return jsonBadRequest("Visa subtype is required when residency status is Visa")
+      }
+      if (!body.visaExpiryDate || !isValidDate(body.visaExpiryDate)) {
+        return jsonBadRequest("A valid visa expiry date is required for Visa status")
+      }
     }
 
-    const employeeInOrg = await employeeExistsInOrg(
-      db,
-      body.employeeId,
-      auth.organisationId
-    )
-    if (!employeeInOrg) {
+    const { data: employee, error: employeeError } = await db
+      .from("Employee")
+      .select("*")
+      .eq("id", body.employeeId)
+      .maybeSingle()
+    if (employeeError || !employee) {
+      return jsonBadRequest("Invalid employee")
+    }
+    if (
+      rowOrganisationId(
+        (employee ?? null) as Record<string, unknown> | null | undefined
+      ) !== auth.organisationId
+    ) {
       return jsonBadRequest("Invalid employee")
     }
 
-    const payload = {
-      employeeId: body.employeeId,
-      visaType: body.visaType.trim(),
-      visaExpiryDate: body.visaExpiryDate,
-      updatedAt: new Date().toISOString(),
+    const visaType = buildVisaTypeFromResidency(
+      residencyStatus,
+      body.visaSubtype ?? ""
+    )
+    const storedVisaExpiryDate = getStoredVisaExpiryDate(
+      residencyStatus,
+      body.visaExpiryDate
+    )
+    const payloadVariants: Array<Record<string, unknown>> = [
+      {
+        employeeId: body.employeeId,
+        visaType,
+        visaExpiryDate: storedVisaExpiryDate,
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        employee_id: body.employeeId,
+        visa_type: visaType,
+        visa_expiry_date: storedVisaExpiryDate,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        employee_id: body.employeeId,
+        visaType,
+        visaExpiryDate: storedVisaExpiryDate,
+        updatedAt: new Date().toISOString(),
+      },
+    ]
+
+    const onConflictColumns = ["employeeId", "employee_id"]
+    let savedItem: unknown = null
+    let lastError = "Failed to save right to work record"
+    for (const onConflict of onConflictColumns) {
+      for (const payload of payloadVariants) {
+        const { data, error } = await db
+          .from("RightToWork")
+          .upsert(payload, { onConflict })
+          .select("*")
+          .single()
+        if (!error) {
+          savedItem = data
+          break
+        }
+        lastError = error.message || lastError
+      }
+      if (savedItem) break
     }
 
-    const { error } = await db
-      .from("RightToWork")
-      .upsert(payload, { onConflict: "employeeId" })
-
-    if (error) return jsonServerError(error.message, "Failed to save right to work record")
-    return NextResponse.json({ ok: true })
+    if (!savedItem) return jsonServerError(lastError, "Failed to save right to work record")
+    return NextResponse.json({ item: savedItem })
   } catch (error) {
     return jsonServerError(error, "Failed to save right to work record")
   }

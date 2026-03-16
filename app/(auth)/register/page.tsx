@@ -3,7 +3,6 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -14,6 +13,14 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+
+function normalizeEmail(value: string) {
+  return value.trim().replace(/\s+/g, "").toLowerCase()
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -28,27 +35,32 @@ export default function RegisterPage() {
     const formData = new FormData(form)
     const organisationName = formData.get("organisationName") as string
     const name = formData.get("name") as string
-    const email = formData.get("email") as string
+    const emailRaw = (formData.get("email") as string) ?? ""
+    const email = normalizeEmail(emailRaw)
     const password = formData.get("password") as string
+    if (!isValidEmail(email)) {
+      setError("Please enter a valid email address.")
+      setLoading(false)
+      return
+    }
 
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            organisation_name: organisationName,
-            full_name: name,
-          },
-        },
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organisationName,
+          name,
+          email,
+          password,
+        }),
       })
-      if (error) {
-        setError(error.message ?? "Something went wrong.")
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string }
+        setError(payload.error ?? "Something went wrong.")
         return
       }
-      const needsConfirm = !data.session
-      router.push(`/login?registered=true${needsConfirm ? "&confirm=true" : ""}`)
+      router.push("/login?registered=true")
     } catch {
       setError("Something went wrong. Please try again.")
     } finally {

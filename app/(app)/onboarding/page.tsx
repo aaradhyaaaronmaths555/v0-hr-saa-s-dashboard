@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server"
 import { Badge } from "@/components/ui/badge"
 import { fetchLiveComplianceData } from "@/lib/supabase/live-data"
 import type { LiveEmployee } from "@/lib/supabase/live-data"
+import { PageHeader } from "@/components/shared/page-header"
+import { EmptyState } from "@/components/shared/empty-state"
 
 function onboardingVariant(status: string): "success" | "warning" | "destructive" | "neutral" {
   if (status === "Complete") return "success"
@@ -21,11 +23,11 @@ export default async function OnboardingPage() {
   const data = await fetchLiveComplianceData(supabase as never)
 
   return (
-    <div className="flex w-full flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Onboarding</h1>
-        <p className="mt-1 text-sm text-slate-600">Live onboarding status from Supabase</p>
-      </div>
+    <div className="flex w-full flex-col gap-8">
+      <PageHeader
+        title="Onboarding"
+        description="Track each employee's onboarding progress and focus on the next required step."
+      />
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
@@ -51,11 +53,14 @@ export default async function OnboardingPage() {
           </tbody>
         </table>
 
-        {data.employees.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-slate-500">
-            No onboarding records found yet.
-          </div>
-        )}
+        {data.employees.length === 0 ? (
+          <EmptyState
+            title="No onboarding records yet"
+            description="Add your first employee to begin onboarding tracking and completion follow-up."
+            actionLabel="Add Employee"
+            actionHref="/employees/new"
+          />
+        ) : null}
       </div>
     </div>
   )

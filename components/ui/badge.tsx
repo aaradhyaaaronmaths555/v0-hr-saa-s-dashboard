@@ -5,24 +5,24 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const badgeVariants = cva(
-  'inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none transition-[color,box-shadow] overflow-hidden',
+  'inline-flex h-6 items-center justify-center rounded-full border px-2.5 text-xs font-semibold w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none transition-[color,background-color,border-color] overflow-hidden',
   {
     variants: {
       variant: {
         default:
-          'border-transparent bg-primary-soft text-primary [a&]:hover:bg-primary-soft/80',
+          'border-primary/20 bg-primary-soft text-primary [a&]:hover:bg-primary-soft/80',
         secondary:
-          'border-transparent bg-neutral-bg text-neutral [a&]:hover:bg-border-strong',
+          'border-border bg-neutral-bg text-neutral [a&]:hover:bg-border-strong',
         destructive:
-          'border-transparent bg-danger-bg text-danger [a&]:hover:bg-danger-bg/80',
+          'border-danger/20 bg-danger-bg text-danger [a&]:hover:bg-danger-bg/80',
         outline:
           'border border-border bg-transparent text-text-secondary [a&]:hover:bg-neutral-bg',
         success:
-          'border-transparent bg-success-bg text-success [a&]:hover:bg-success-bg/80',
+          'border-success/20 bg-success-bg text-success [a&]:hover:bg-success-bg/80',
         warning:
-          'border-transparent bg-warning-bg text-warning [a&]:hover:bg-warning-bg/80',
+          'border-warning/20 bg-warning-bg text-warning [a&]:hover:bg-warning-bg/80',
         neutral:
-          'border-transparent bg-neutral-bg text-neutral [a&]:hover:bg-border-strong',
+          'border-border bg-neutral-bg text-neutral [a&]:hover:bg-border-strong',
       },
     },
     defaultVariants: {

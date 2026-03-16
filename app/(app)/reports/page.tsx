@@ -2,23 +2,50 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { fetchLiveComplianceData } from "@/lib/supabase/live-data"
+import { EmptyState } from "@/components/shared/empty-state"
+import { PageHeader } from "@/components/shared/page-header"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  fetchLiveComplianceData,
+  getWHSIncidentsForOrg,
+} from "@/lib/supabase/live-data"
 import type { LiveEmployee } from "@/lib/supabase/live-data"
 import { getEmployeeComplianceScores } from "@/lib/compliance/metrics"
 
-export default async function ReportsPage() {
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ prepare?: string }>
+}) {
+  const auditPreviewUrl = "/audit-export"
+  const prepareHref = "/reports?prepare=1"
+  const resolvedSearchParams = searchParams
+    ? await searchParams
+    : undefined
+  const shouldPrepareAudit = resolvedSearchParams?.prepare === "1"
   const supabase = await createClient()
   const data = await fetchLiveComplianceData(supabase as never)
-  const { data: whsRows } = await supabase
-    .from("WHSIncident")
-    .select("id,incidentType,status,incidentDate,correctiveAction")
-    .order("incidentDate", { ascending: false })
+  const whsRows = data.organisationId
+    ? await getWHSIncidentsForOrg(supabase as never, data.organisationId)
+    : []
   const complianceScores = getEmployeeComplianceScores(
     data.employees,
     data.certificates,
     data.policies,
     data.acknowledgements
   )
+  const scoreValues = [...complianceScores.values()].map((item) => item.score)
+  const averageScore =
+    scoreValues.length > 0
+      ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length)
+      : 0
 
   const employeeById = new Map<string, LiveEmployee>(
     data.employees.map((employee: LiveEmployee) => [employee.id, employee] as const)
@@ -65,87 +92,158 @@ export default async function ReportsPage() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Reports</h1>
-          <p className="mt-1 text-sm text-slate-600">Live compliance summary from Supabase</p>
-        </div>
-        <Button asChild>
-          <Link href="/reports/audit-export?print=1" target="_blank">
-            Export Audit Report
-          </Link>
-        </Button>
-      </div>
+    <div className="flex w-full flex-col gap-8">
+      <PageHeader
+        title="Reports"
+        description="Review your compliance position and export an audit-ready snapshot for inspectors."
+        action={
+          <Button asChild>
+            <Link href={prepareHref}>
+              Prepare Audit Report
+            </Link>
+          </Button>
+        }
+      />
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
-            <tr>
-              <th className="px-4 py-3 font-medium">Employee</th>
-              <th className="px-4 py-3 font-medium">Onboarding</th>
-              <th className="px-4 py-3 font-medium">Certificates</th>
-              <th className="px-4 py-3 font-medium">Policy Acks</th>
-              <th className="px-4 py-3 font-medium">Compliance Score</th>
-              <th className="px-4 py-3 font-medium">Overall</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.employees.map((employee: LiveEmployee) => {
-              const certCount = certCountByEmployee.get(employee.id) ?? 0
-              const ackCount = policyAcksByEmployee.get(employee.id) ?? 0
-              const score = complianceScores.get(employee.id)?.score ?? 0
-              const status =
-                score >= 80
-                  ? "Compliant"
-                  : "Action Needed"
-
-              return (
-                <tr key={employee.id} className="border-t border-slate-100">
-                  <td className="px-4 py-3 text-slate-800">{employeeById.get(employee.id)?.name}</td>
-                  <td className="px-4 py-3 text-slate-700">{employee.onboardingStatus}</td>
-                  <td className="px-4 py-3 text-slate-700">{certCount}</td>
-                  <td className="px-4 py-3 text-slate-700">{ackCount}</td>
-                  <td className="px-4 py-3 text-slate-700">{score}%</td>
-                  <td className="px-4 py-3">
-                    <Badge variant={status === "Compliant" ? "success" : "warning"}>{status}</Badge>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-
-        {data.employees.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-slate-500">
-            No report data available yet.
+      {shouldPrepareAudit ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+                Audit Report Preview
+              </h2>
+              <p className="text-sm text-slate-600">
+                Report is prepared on this page. Use the report&apos;s print button to download PDF.
+              </p>
+            </div>
+            <Button variant="outline" asChild>
+              <Link href="/reports">Close Preview</Link>
+            </Button>
           </div>
-        )}
-      </div>
+          <iframe
+            src={auditPreviewUrl}
+            title="Audit report preview"
+            className="h-[75vh] w-full rounded-lg border border-slate-200"
+          />
+        </section>
+      ) : null}
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">WHS Incident Lifecycle</h2>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-700 sm:grid-cols-4">
-          <p>New: {whsStatusCounts.New}</p>
-          <p>In review: {whsStatusCounts["In review"]}</p>
-          <p>Actioned: {whsStatusCounts.Actioned}</p>
-          <p>Closed: {whsStatusCounts.Closed}</p>
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Employees
+          </p>
+          <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            {data.employees.length}
+          </p>
         </div>
-        <div className="mt-4 space-y-2 text-sm">
-          <div className="flex items-center gap-2">
-            <Badge variant={whsStuckOver7 > 0 ? "destructive" : "success"}>Stuck &gt; 7 days</Badge>
-            <span className="text-slate-700">{whsStuckOver7} incidents</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge
-              variant={whsClosedWithoutCorrective > 0 ? "destructive" : "success"}
-            >
-              Closed without corrective action
-            </Badge>
-            <span className="text-slate-700">{whsClosedWithoutCorrective} incidents</span>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Certificates
+          </p>
+          <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            {data.certificates.length}
+          </p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Policy Acknowledgements
+          </p>
+          <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            {data.acknowledgements.filter((ack) => !!ack.acknowledgedAt).length}
+          </p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Avg Compliance Score
+          </p>
+          <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            {averageScore}%
+          </p>
+        </div>
+      </section>
+
+      <Table className="w-full">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Employee</TableHead>
+            <TableHead className="hidden lg:table-cell">Onboarding</TableHead>
+            <TableHead className="text-right">Certificates</TableHead>
+            <TableHead className="text-right">Policy Acks</TableHead>
+            <TableHead className="text-right">Compliance Score</TableHead>
+            <TableHead>Overall</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.employees.map((employee: LiveEmployee) => {
+            const certCount = certCountByEmployee.get(employee.id) ?? 0
+            const ackCount = policyAcksByEmployee.get(employee.id) ?? 0
+            const score = complianceScores.get(employee.id)?.score ?? 0
+            const status = score >= 80 ? "Compliant" : "Action Needed"
+
+            return (
+              <TableRow key={employee.id}>
+                <TableCell>{employeeById.get(employee.id)?.name}</TableCell>
+                <TableCell className="hidden lg:table-cell">{employee.onboardingStatus}</TableCell>
+                <TableCell className="text-right font-medium tabular-nums text-slate-900">
+                  {certCount}
+                </TableCell>
+                <TableCell className="text-right font-medium tabular-nums text-slate-900">
+                  {ackCount}
+                </TableCell>
+                <TableCell className="text-right font-semibold tabular-nums text-slate-900">
+                  {score}%
+                </TableCell>
+                <TableCell>
+                  <Badge variant={status === "Compliant" ? "success" : "warning"}>
+                    {status}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+
+      {data.employees.length === 0 ? (
+        <EmptyState
+          title="No report data yet"
+          description="Add employees and compliance records first, then return here for reporting."
+          actionLabel="Add Employee"
+          actionHref="/employees/new"
+        />
+      ) : null}
+
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+            WHS Incident Lifecycle
+          </h2>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-700 sm:grid-cols-4 md:grid-cols-2 xl:grid-cols-4">
+            <p>New: {whsStatusCounts.New}</p>
+            <p>In review: {whsStatusCounts["In review"]}</p>
+            <p>Actioned: {whsStatusCounts.Actioned}</p>
+            <p>Closed: {whsStatusCounts.Closed}</p>
           </div>
         </div>
-      </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900">WHS Risk Flags</h2>
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <Badge variant={whsStuckOver7 > 0 ? "destructive" : "success"}>Stuck &gt; 7 days</Badge>
+              <span className="text-slate-700">{whsStuckOver7} incidents</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge
+                variant={whsClosedWithoutCorrective > 0 ? "destructive" : "success"}
+              >
+                Closed without corrective action
+              </Badge>
+              <span className="text-slate-700">{whsClosedWithoutCorrective} incidents</span>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }

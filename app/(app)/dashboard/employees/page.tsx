@@ -2,7 +2,7 @@ import { EmployeesTable } from "@/components/dashboard/employees-table"
 
 export default function EmployeesPage() {
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className="flex w-full flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Employees</h1>
         <p className="mt-1 text-sm text-muted-foreground">
